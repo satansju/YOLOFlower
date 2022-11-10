@@ -10,9 +10,11 @@ from tqdm import tqdm
 
 verbose_global = False
 
-source_directory = "../Raw data/All_w_ann/"
-reduced_directory = "../Reduced 4x"
-sliced_directory = "../Sliced"
+raise NotImplementedError("Cloud not setup!")
+source_directory, reduced_directory, sliced_directory = read_directories("cloud_directories.txt") # eller get_cloud_directories()
+# source_directory = "../Raw data/All_w_ann/"
+# reduced_directory = "../Reduced 4x"
+# sliced_directory = "../Sliced"
 
 in_resolution = (6080, 3420)
 downscaling_factor = 4
