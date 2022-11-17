@@ -7,7 +7,6 @@ from shutil import rmtree
 
 from data_cleaning import create_yolo_annotations
 from image_resizing import resize_images
-from dataset_splitting import train_validation_test_split
 from tqdm import tqdm
 
 from slicing import slice_image
@@ -120,8 +119,6 @@ def main(downscaling_factor : str = "4", split : str = "0.8,0.16,0.04", num_subs
         
         for i in t:
             tile_one_image(i)
-
-    # train_validation_test_split(source=sliced_directory, split=split)
 
 if __name__ == '__main__':
     # raise NotImplementedError("Train/Validation/Test splitting not implemented!")
