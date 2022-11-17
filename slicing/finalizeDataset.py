@@ -1,23 +1,47 @@
-from image_resizing import resizeImages
-from data_cleaning import create_yolo_annotations
-from slicing import slice_image
-import multiprocessing.dummy as mpd
 import glob
+import multiprocessing.dummy as mpd
 import os
 import re
-from shutil import rmtree
-from tqdm import tqdm
 import sys
+from shutil import rmtree
+
+from data_cleaning import create_yolo_annotations
+from image_resizing import resize_images
+from dataset_splitting import train_validation_test_split
+from tqdm import tqdm
+
+from slicing import slice_image
 
 verbose_global = False
 
 def read_directories(path : str) -> tuple[str, str, str]:
     with open(path, "r") as f:
         lines = f.readlines()
+        lines = [i[:-1] for i in lines]
 
     return tuple(lines)
 
-def main(downscaling_factor : str = "4", verbose : bool = False) -> None:
+def main(downscaling_factor : str = "4", split : str = "0.8,0.16,0.04", num_subset : str = None, verbose : str = "False") -> None:
+
+    if not num_subset is None:
+        try:
+            num_subset = int(num_subset)
+            if num_subset <= 0:
+                raise ValueError("Argument 'num_subset' is smaller than or equal to 0.")
+        except:
+            raise ValueError("Argument 'num_subset' must be a positive non-zero integer.") 
+
+    verbose = False if verbose == "False" else True if verbose == "True" else None
+    if verbose is None:
+        raise ValueError("Argument verbose must be one of either 'True' or 'False'")
+
+    try:
+        split = tuple([float(i) for i in split.rsplit(",")])
+        print(split)
+        if not len(split) == 3 or not sum(split) == 1:
+            raise ValueError("Argument 'split' must contain 3 values that add to 1.")
+    except:
+        raise ValueError("Argument 'split' must be a string consisting of 3 numbers separated by commas and adding to 1.")
 
     try:
         downscaling_factor = int(downscaling_factor)
@@ -34,11 +58,12 @@ def main(downscaling_factor : str = "4", verbose : bool = False) -> None:
     if os.path.exists(reduced_directory): rmtree(reduced_directory)
     if os.path.exists(sliced_directory): rmtree(sliced_directory)
 
-    resizeImages(
+    resize_images(
         src=source_directory,
         dst=reduced_directory + os.sep + "images",
         resolution=out_resolution,
         out_ext="jpg",
+        num_subset=num_subset,
         verbose=verbose)
 
     create_yolo_annotations(
@@ -50,14 +75,6 @@ def main(downscaling_factor : str = "4", verbose : bool = False) -> None:
     image_path_pattern = f'{reduced_directory}{os.sep}images{os.sep}**{os.sep}**.jpg'
     sliced_image_path_pattern = f'{sliced_directory}{os.sep}images{os.sep}**.jpg'
     annotation_path_pattern = f'{reduced_directory}{os.sep}labels{os.sep}**{os.sep}**.txt'
-
-    # print("Image pattern:", image_path_pattern)
-    # print("Annotation pattern:", annotation_path_pattern)
-
-    # print([re.search("[a-zA-Z0-9_\.]+$", i).group(0) for i in glob.iglob(image_path_pattern)])
-    # print([re.search("[a-zA-Z0-9_\.]+$", i).group(0) for i in glob.iglob(annotation_path_pattern)])
-
-    # raise NotImplementedError("Slicing disabled for now!")
 
     origin_image_set = {re.search("[a-zA-Z0-9_]+(?=\.[a-zA-Z]{2,4}$)", i).group(0) for i in glob.iglob(image_path_pattern)}
     slice_image_set = {re.search("[a-zA-Z0-9_]+(?=(_[0-9]{1,4}){4}\.[a-zA-Z]{2,4}$)", i).group(0) for i in glob.iglob(sliced_image_path_pattern)}
@@ -74,7 +91,6 @@ def main(downscaling_factor : str = "4", verbose : bool = False) -> None:
             continue
         left_image_paths.append(possible_left[0])
 
-    # glob.glob(image_path_pattern)
     with tqdm(left_image_paths) as t:
 
         def tile_one_image(reduced_file: str) -> None:
@@ -83,12 +99,17 @@ def main(downscaling_factor : str = "4", verbose : bool = False) -> None:
             image = re.sub("[/\\\\]+", "/", reduced_file)
             annotation = re.sub("(?<=/)images(?=/)", "labels", image)
             annotation = re.sub("\.[a-zA-Z]+$", ".txt", annotation)
+            
+            image_uuid = re.search("[a-zA-Z0-9_]+(?=\.txt$)", annotation).group(0) # Global unique image identifier
+            uuid_parts = image_uuid.rsplit("_")
+            series = "_".join(uuid_parts[:2]) # Image series
+            local_id = "_".join(uuid_parts[2:]) # Series unique image identifier
 
             slice_image(
                 image=image,
                 yolo_annotation=annotation,
-                output_dir=sliced_directory, # + re.search("(?<=/images)/[a-zA-Z0-9_-]+(?=/)", image).group(0),
-                output_file_name=re.search("[a-zA-Z0-9_]+(?=\.txt$)", annotation).group(0) + "_bbox",
+                output_dir=f'{sliced_directory}{os.sep}*{os.sep}{series}{os.sep}{local_id}', # + re.search("(?<=/images)/[a-zA-Z0-9_-]+(?=/)", image).group(0),
+                output_file_name=image_uuid + "_bbox",
                 slice_height=640,
                 slice_width=640,
                 overlap_height_ratio=0.1,
@@ -99,15 +120,14 @@ def main(downscaling_factor : str = "4", verbose : bool = False) -> None:
         
         for i in t:
             tile_one_image(i)
-        # pool = mpd.Pool()
 
-        # pool.map(tile_one_image, t)
-
+    # train_validation_test_split(source=sliced_directory, split=split)
 
 if __name__ == '__main__':
-    args = {}
+    # raise NotImplementedError("Train/Validation/Test splitting not implemented!")
+    kwargs = {}
     for i in sys.argv[1:]:
         v = re.search("(?<==).+$", i).group(0)
         k = re.search("(?<=--)[a-zA-Z_]+(?==)", i).group(0)
-        args[k] = v 
-    main(**args)
+        kwargs[k] = v 
+    main(**kwargs)

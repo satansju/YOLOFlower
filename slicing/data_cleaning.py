@@ -102,7 +102,7 @@ def make_series_dir(path, dir):
 
 class clean_filenames:
     def __init__(self, dir: str):
-        self.dict = {clean_filename(i, True, True, False) : i for i in glob.iglob(dir + "**/**")}
+        self.dict = {clean_filename(i, True, True, False) : i for i in glob.iglob(f'{dir}{os.sep}**{os.sep}**')}
         self.inv = {v : k for k, v in self.dict.items()}
 
     def translate(self, file: str or list[str]) -> str or list[str]:
@@ -125,6 +125,7 @@ def create_yolo_annotations(dir: str, out_dir: str, verbose: bool = False) -> No
     file_cleaner = clean_filenames(dir)
     class_translator = class_to_index()
     annotations = bboxesFromDirectory(dir)
+
     if not os.path.exists(out_dir + os.sep + "images"):
         if verbose:
             print("Output directory does not contain any images!")

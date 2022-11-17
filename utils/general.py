@@ -702,7 +702,7 @@ def labels_to_image_weights(labels, nc=80, class_weights=np.ones(80)):
     # Produces image weights based on class_weights and image contents
     # Usage: index = random.choices(range(n), weights=image_weights, k=1)  # weighted image sample
     class_counts = np.array([np.bincount(x[:, 0].astype(int), minlength=nc) for x in labels])
-    return (class_weights.reshape(1, nc) * class_counts).sum(1)
+    return (class_weights.reshape(1, nc) * class_counts).mean(1)
 
 
 def coco80_to_coco91_class():  # converts 80-index (val2014) to 91-index (paper)

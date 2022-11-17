@@ -15,6 +15,26 @@ Datasets:   https://github.com/ultralytics/yolov5/tree/master/data
 Tutorial:   https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data
 """
 
+from slicing.dataset_splitting import create_dataset, create_dataloader_from_dataset, LoadFlower
+from utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, select_device, smart_DDP, smart_optimizer,
+                               smart_resume, torch_distributed_zero_first)
+from utils.plots import plot_evolve
+from utils.metrics import fitness
+from utils.loss import ComputeLoss
+from utils.loggers.comet.comet_utils import check_comet_resume
+from utils.loggers import Loggers
+from utils.general import (LOGGER, check_amp, check_dataset, check_file, check_git_status, check_img_size,
+                           check_requirements, check_suffix, check_yaml, colorstr, get_latest_run, increment_path,
+                           init_seeds, intersect_dicts, labels_to_class_weights, labels_to_image_weights, methods,
+                           one_cycle, print_args, print_mutation, strip_optimizer, yaml_save)
+from utils.downloads import attempt_download, is_url
+from utils.dataloaders import create_dataloader
+from utils.callbacks import Callbacks
+from utils.autobatch import check_train_batch_size
+from utils.autoanchor import check_anchors
+from models.yolo import Model
+from models.experimental import attempt_load
+import val as validate  # for end-of-epoch mAP
 import argparse
 import math
 import os
@@ -39,25 +59,6 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-import val as validate  # for end-of-epoch mAP
-from models.experimental import attempt_load
-from models.yolo import Model
-from utils.autoanchor import check_anchors
-from utils.autobatch import check_train_batch_size
-from utils.callbacks import Callbacks
-from utils.dataloaders import create_dataloader
-from utils.downloads import attempt_download, is_url
-from utils.general import (LOGGER, check_amp, check_dataset, check_file, check_git_status, check_img_size,
-                           check_requirements, check_suffix, check_yaml, colorstr, get_latest_run, increment_path,
-                           init_seeds, intersect_dicts, labels_to_class_weights, labels_to_image_weights, methods,
-                           one_cycle, print_args, print_mutation, strip_optimizer, yaml_save)
-from utils.loggers import Loggers
-from utils.loggers.comet.comet_utils import check_comet_resume
-from utils.loss import ComputeLoss
-from utils.metrics import fitness
-from utils.plots import plot_evolve
-from utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, select_device, smart_DDP, smart_optimizer,
-                               smart_resume, torch_distributed_zero_first)
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
@@ -157,7 +158,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     if opt.cos_lr:
         lf = one_cycle(1, hyp['lrf'], epochs)  # cosine 1->hyp['lrf']
     else:
-        lf = lambda x: (1 - x / epochs) * (1.0 - hyp['lrf']) + hyp['lrf']  # linear
+        def lf(x): return (1 - x / epochs) * (1.0 - hyp['lrf']) + hyp['lrf']  # linear
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)  # plot_lr_scheduler(optimizer, scheduler, epochs)
 
     # EMA
@@ -181,44 +182,70 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(device)
         LOGGER.info('Using SyncBatchNorm()')
 
-    # Trainloader
-    train_loader, dataset = create_dataloader(train_path,
-                                              imgsz,
-                                              batch_size // WORLD_SIZE,
-                                              gs,
-                                              single_cls,
-                                              hyp=hyp,
-                                              augment=True,
-                                              cache=None if opt.cache == 'val' else opt.cache,
-                                              rect=opt.rect,
-                                              rank=LOCAL_RANK,
-                                              workers=workers,
-                                              image_weights=opt.image_weights,
-                                              quad=opt.quad,
-                                              prefix=colorstr('train: '),
-                                              shuffle=True)
-    labels = np.concatenate(dataset.labels, 0)
+    ############ Modified ####################
+    # Modified data splitting to fix data leakage across images from the same source
+    train_dataset, val_dataset, test_dataset, train_meta, val_meta, test_meta = create_dataset(
+        path,
+        imgsz,
+        batch_size // WORLD_SIZE,
+        gs,
+        single_cls,
+        hyp=hyp,
+        augment=True,
+        cache=None if opt.cache == 'val' else opt.cache,
+        rect=opt.rect,
+        rank=LOCAL_RANK,
+        workers=workers,
+        image_weights=opt.image_weights,
+        quad=opt.quad,
+        prefix=colorstr('train: '),
+        shuffle=True
+        ).split(
+        proportions=[80, 16, 4],
+        stratification_level=1)
+        
+    train_loader, val_loader, test_loader = (create_dataloader(i) for i in [train_dataset, val_dataset, train_dataset])
+
+    ##########################################
+
+    # # Trainloader
+    # train_loader, dataset = create_dataloader(train_path,
+    #                                           imgsz,
+    #                                           batch_size // WORLD_SIZE,
+    #                                           gs,
+    #                                           single_cls,
+    #                                           hyp=hyp,
+    #                                           augment=True,
+    #                                           cache=None if opt.cache == 'val' else opt.cache,
+    #                                           rect=opt.rect,
+    #                                           rank=LOCAL_RANK,
+    #                                           workers=workers,
+    #                                           image_weights=opt.image_weights,
+    #                                           quad=opt.quad,
+    #                                           prefix=colorstr('train: '),
+    #                                           shuffle=True)
+    labels = np.concatenate(train_dataset.labels, 0)
     mlc = int(labels[:, 0].max())  # max label class
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
     # Process 0
     if RANK in {-1, 0}:
-        val_loader = create_dataloader(val_path,
-                                       imgsz,
-                                       batch_size // WORLD_SIZE * 2,
-                                       gs,
-                                       single_cls,
-                                       hyp=hyp,
-                                       cache=None if noval else opt.cache,
-                                       rect=True,
-                                       rank=-1,
-                                       workers=workers * 2,
-                                       pad=0.5,
-                                       prefix=colorstr('val: '))[0]
+        # val_loader = create_dataloader(val_path,
+        #                                imgsz,
+        #                                batch_size // WORLD_SIZE * 2,
+        #                                gs,
+        #                                single_cls,
+        #                                hyp=hyp,
+        #                                cache=None if noval else opt.cache,
+        #                                rect=True,
+        #                                rank=-1,
+        #                                workers=workers * 2,
+        #                                pad=0.5,
+        #                                prefix=colorstr('val: '))[0]
 
         if not resume:
             if not opt.noautoanchor:
-                check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)  # run AutoAnchor
+                check_anchors(train_dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)  # run AutoAnchor
             model.half().float()  # pre-reduce anchor precision
 
         callbacks.run('on_pretrain_routine_end', labels, names)
@@ -235,7 +262,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     hyp['label_smoothing'] = opt.label_smoothing
     model.nc = nc  # attach number of classes to model
     model.hyp = hyp  # attach hyperparameters to model
-    model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
+    model.class_weights = labels_to_class_weights(train_dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
 
     # Start training
@@ -262,8 +289,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
             cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
-            iw = labels_to_image_weights(dataset.labels, nc=nc, class_weights=cw)  # image weights
-            dataset.indices = random.choices(range(dataset.n), weights=iw, k=dataset.n)  # rand weighted idx
+            iw = labels_to_image_weights(train_dataset.labels, nc=nc, class_weights=cw)  # image weights
+            train_dataset.indices = random.choices(range(train_dataset.n), weights=iw, k=train_dataset.n)  # rand weighted idx
 
         # Update mosaic border (optional)
         # b = int(random.uniform(0.25 * imgsz, 0.75 * imgsz + gs) // gs * gs)

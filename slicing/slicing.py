@@ -2,24 +2,22 @@
 # Code written by Fatih C Akyon, 2020.
 
 import concurrent.futures
-from email.mime import image
 import logging
 import os
+import re
+import shutil
 import time
+from email.mime import image
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from PIL import Image
-from shapely.errors import TopologicalError
-from tqdm import tqdm
-import re
-
 from coco import Coco, CocoAnnotation, CocoImage, create_coco_dict
 from cv import read_image_as_pil
 from file import load_json, save_json
-
-import shutil
+from PIL import Image
+from shapely.errors import TopologicalError
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -348,13 +346,22 @@ def slice_image(
     # define verboseprint
     verboselog = logger.info if verbose else lambda *a, **k: None
 
-    def export_single_slice(image: np.ndarray, annotation: Optional[list[tuple]], output_dir: str, slice_file_name: str):
+    # create outdir if not present
+    if output_dir is not None:
+        # shutil.rmtree(output_dir)
+        image_dst = re.sub("\*", "images", output_dir)
+        label_dst = re.sub("\*", "labels", output_dir)
+        Path(image_dst).mkdir(parents=True, exist_ok=True)
+        if yolo_annotation is not None:
+            Path(label_dst).mkdir(parents=True, exist_ok=True)
+
+    def export_single_slice(image: np.ndarray, annotation: Optional[list[tuple]], slice_file_name: str):
         if annotation is not None and len(annotation) < min_out_slice_annotations:
             return
         slice_file_name_base = re.sub(f"{out_ext}$", "", slice_file_name)
         ## Export image
         image_pil = read_image_as_pil(image)
-        image_slice_file_path = f'{output_dir}{os.sep}images{os.sep}{slice_file_name_base}.jpg'
+        image_slice_file_path = f'{image_dst}{os.sep}{slice_file_name_base}.jpg'
         # export sliced image
         if verbose:
             print("Attempting to save image at", image_slice_file_path)
@@ -363,7 +370,7 @@ def slice_image(
         verboselog("sliced image path: " + image_slice_file_path)
         ## Export annotation
         if annotation is not None:
-            annotation_slice_file_path = f'{output_dir}{os.sep}labels{os.sep}{slice_file_name_base}.txt'
+            annotation_slice_file_path = f'{label_dst}{os.sep}{slice_file_name_base}.txt'
             if verbose:
                 print("Attempting to save annotation at", annotation_slice_file_path)
             with open(annotation_slice_file_path, "x") as f:
@@ -371,14 +378,6 @@ def slice_image(
                 lines[:-1] = [i + "\n" for i in lines[:-1]]
                 f.writelines(lines)
             verboselog("sliced annotation path: " + annotation_slice_file_path)
-
-    # create outdir if not present
-    if output_dir is not None:
-        # shutil.rmtree(output_dir)
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        Path(output_dir + "/images").mkdir(parents=True, exist_ok=True)
-        if yolo_annotation is not None:
-            Path(output_dir + "/labels").mkdir(parents=True, exist_ok=True)
 
     # read image
     image_pil = read_image_as_pil(image)
@@ -466,13 +465,12 @@ def slice_image(
 
     # export slices if output directory is provided
     if output_file_name and output_dir:
-        for img, ann, dir, file in zip(
+        for img, ann, file in zip(
             sliced_image_result.images,
             sliced_image_result.annotations if yolo_annotation is not None else None,
-            [output_dir] * len(sliced_image_result),
             slice_file_names):
             
-            export_single_slice(img, ann, dir, file)
+            export_single_slice(img, ann, file)
         # conc_exec = concurrent.futures.ThreadPoolExecutor(max_workers=8)
         # conc_exec.map(
         #     export_single_slice,
@@ -489,93 +487,93 @@ def slice_image(
     return sliced_image_result
 
 
-def slice_coco(
-    coco_annotation_file_path: str,
-    image_dir: str,
-    output_coco_annotation_file_name: str,
-    output_dir: Optional[str] = None,
-    ignore_negative_samples: bool = False,
-    slice_height: int = 512,
-    slice_width: int = 512,
-    overlap_height_ratio: float = 0.2,
-    overlap_width_ratio: float = 0.2,
-    min_area_ratio: float = 0.1,
-    out_ext: Optional[str] = None,
-    verbose: bool = False,
-) -> List[Union[Dict, str]]:
-    """
-    Slice large images given in a directory, into smaller windows. If out_name is given export sliced images and coco file.
-    Args:
-        coco_annotation_file_pat (str): Location of the coco annotation file
-        image_dir (str): Base directory for the images
-        output_coco_annotation_file_name (str): File name of the exported coco
-            datatset json.
-        output_dir (str, optional): Output directory
-        ignore_negative_samples (bool): If True, images without annotations
-            are ignored. Defaults to False.
-        slice_height (int): Height of each slice. Default 512.
-        slice_width (int): Width of each slice. Default 512.
-        overlap_height_ratio (float): Fractional overlap in height of each
-            slice (e.g. an overlap of 0.2 for a slice of size 100 yields an
-            overlap of 20 pixels). Default 0.2.
-        overlap_width_ratio (float): Fractional overlap in width of each
-            slice (e.g. an overlap of 0.2 for a slice of size 100 yields an
-            overlap of 20 pixels). Default 0.2.
-        min_area_ratio (float): If the cropped annotation area to original annotation
-            ratio is smaller than this value, the annotation is filtered out. Default 0.1.
-        out_ext (str, optional): Extension of saved images. Default is the
-            original suffix.
-        verbose (bool, optional): Switch to print relevant values to screen.
-            Default 'False'.
-    Returns:
-        coco_dict: dict
-            COCO dict for sliced images and annotations
-        save_path: str
-            Path to the saved coco file
-    """
+# def slice_coco(
+#     coco_annotation_file_path: str,
+#     image_dir: str,
+#     output_coco_annotation_file_name: str,
+#     output_dir: Optional[str] = None,
+#     ignore_negative_samples: bool = False,
+#     slice_height: int = 512,
+#     slice_width: int = 512,
+#     overlap_height_ratio: float = 0.2,
+#     overlap_width_ratio: float = 0.2,
+#     min_area_ratio: float = 0.1,
+#     out_ext: Optional[str] = None,
+#     verbose: bool = False,
+# ) -> List[Union[Dict, str]]:
+#     """
+#     Slice large images given in a directory, into smaller windows. If out_name is given export sliced images and coco file.
+#     Args:
+#         coco_annotation_file_pat (str): Location of the coco annotation file
+#         image_dir (str): Base directory for the images
+#         output_coco_annotation_file_name (str): File name of the exported coco
+#             datatset json.
+#         output_dir (str, optional): Output directory
+#         ignore_negative_samples (bool): If True, images without annotations
+#             are ignored. Defaults to False.
+#         slice_height (int): Height of each slice. Default 512.
+#         slice_width (int): Width of each slice. Default 512.
+#         overlap_height_ratio (float): Fractional overlap in height of each
+#             slice (e.g. an overlap of 0.2 for a slice of size 100 yields an
+#             overlap of 20 pixels). Default 0.2.
+#         overlap_width_ratio (float): Fractional overlap in width of each
+#             slice (e.g. an overlap of 0.2 for a slice of size 100 yields an
+#             overlap of 20 pixels). Default 0.2.
+#         min_area_ratio (float): If the cropped annotation area to original annotation
+#             ratio is smaller than this value, the annotation is filtered out. Default 0.1.
+#         out_ext (str, optional): Extension of saved images. Default is the
+#             original suffix.
+#         verbose (bool, optional): Switch to print relevant values to screen.
+#             Default 'False'.
+#     Returns:
+#         coco_dict: dict
+#             COCO dict for sliced images and annotations
+#         save_path: str
+#             Path to the saved coco file
+#     """
 
-    # read coco file
-    coco_dict: Dict = load_json(coco_annotation_file_path)
-    # create image_id_to_annotation_list mapping
-    coco = Coco.from_coco_dict_or_path(coco_dict)
-    # init sliced coco_utils.CocoImage list
-    sliced_coco_images: List = []
+#     # read coco file
+#     coco_dict: Dict = load_json(coco_annotation_file_path)
+#     # create image_id_to_annotation_list mapping
+#     coco = Coco.from_coco_dict_or_path(coco_dict)
+#     # init sliced coco_utils.CocoImage list
+#     sliced_coco_images: List = []
 
-    # iterate over images and slice
-    for coco_image in tqdm(coco.images):
-        # get image path
-        image_path: str = os.path.join(image_dir, coco_image.file_name)
-        # get annotation json list corresponding to selected coco image
-        # slice image
-        try:
-            slice_image_result = slice_image(
-                image=image_path,
-                coco_annotation_list=coco_image.annotations,
-                output_file_name=Path(coco_image.file_name).stem,
-                output_dir=output_dir,
-                slice_height=slice_height,
-                slice_width=slice_width,
-                overlap_height_ratio=overlap_height_ratio,
-                overlap_width_ratio=overlap_width_ratio,
-                min_area_ratio=min_area_ratio,
-                out_ext=out_ext,
-                verbose=verbose,
-            )
-            # append slice outputs
-            sliced_coco_images.extend(slice_image_result.coco_images)
-        except TopologicalError:
-            logger.warning(f"Invalid annotation found, skipping this image: {image_path}")
+#     # iterate over images and slice
+#     for coco_image in tqdm(coco.images):
+#         # get image path
+#         image_path: str = os.path.join(image_dir, coco_image.file_name)
+#         # get annotation json list corresponding to selected coco image
+#         # slice image
+#         try:
+#             slice_image_result = slice_image(
+#                 image=image_path,
+#                 coco_annotation_list=coco_image.annotations,
+#                 output_file_name=Path(coco_image.file_name).stem,
+#                 output_dir=output_dir,
+#                 slice_height=slice_height,
+#                 slice_width=slice_width,
+#                 overlap_height_ratio=overlap_height_ratio,
+#                 overlap_width_ratio=overlap_width_ratio,
+#                 min_area_ratio=min_area_ratio,
+#                 out_ext=out_ext,
+#                 verbose=verbose,
+#             )
+#             # append slice outputs
+#             sliced_coco_images.extend(slice_image_result.coco_images)
+#         except TopologicalError:
+#             logger.warning(f"Invalid annotation found, skipping this image: {image_path}")
 
-    # create and save coco dict
-    coco_dict = create_coco_dict(
-        sliced_coco_images, coco_dict["categories"], ignore_negative_samples=ignore_negative_samples
-    )
-    save_path = ""
-    if output_coco_annotation_file_name and output_dir:
-        save_path = Path(output_dir) / (output_coco_annotation_file_name + "_coco.json")
-        save_json(coco_dict, save_path)
+#     # create and save coco dict
+#     coco_dict = create_coco_dict(
+#         sliced_coco_images, coco_dict["categories"], ignore_negative_samples=ignore_negative_samples
+#     )
+#     save_path = ""
+#     if output_coco_annotation_file_name and output_dir:
+#         save_path = Path(output_dir) / (output_coco_annotation_file_name + "_coco.json")
+#         save_json(coco_dict, save_path)
 
-    return coco_dict, save_path
+#     return coco_dict, save_path
 
 
 def calc_ratio_and_slice(orientation, slide=1, ratio=0.1):
