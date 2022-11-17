@@ -6,6 +6,14 @@ import multiprocessing.dummy as mpd
 from tqdm import tqdm
 
 def bboxesFromDirectory(dir: str) -> pandas.DataFrame:
+    ###
+    # Arguments:
+    #   dir: path to the directory containing the metadata files (assumes they are csv files with columns 'file', 'region_attributes' (class name) and 'region_shape_attributes' (bounding box coordinates))
+    # return: pandas.DataFrame with a row for each bounding box and three columns: 
+    #   'path' contains the file name of the image which the bounding box belongs to, 
+    #   'class' class label of the bounding box & 
+    #   'bbox' a list of length 4 which contains [xmax, ymax, width, height] as integer pixel coordinates  
+    ###
     meta_data_paths = []
     img_paths = []
 
@@ -36,7 +44,6 @@ def bboxesFromDirectory(dir: str) -> pandas.DataFrame:
     return combinedBBoxes
 
 class class_to_index:
-
     def __init__(self):
         self.dict = {
             "Bud" : 0,
@@ -65,6 +72,14 @@ class class_to_index:
             raise ValueError("ind must be a string or a non-empty list of strings.")
 
 def clean_filename(filename: str, with_dir: bool = False, only_file: bool = False, with_ext: bool = True):
+    ###
+    # Arguments:
+    #   filename: an image file name/path
+    #   with_dir: should the returned string keep the path directories?
+    #   only_file: should the returned string only contain the file name?
+    #   with_ext: should the returned string keep the file extension? 
+    # return: A string that uniquely identifies and matches both the image file name of the actual image file and the image file name in the metadata files 
+    ###
     if not with_ext:
         filename = re.sub("\.[a-zA-Z]+$", "", filename)
 
@@ -91,6 +106,11 @@ def clean_filename(filename: str, with_dir: bool = False, only_file: bool = Fals
         return dir + os.sep + filename + filetype
 
 def get_series(path):
+    ###
+    # Arguments:
+    #   path: path of image file subdirectory
+    # return: A unique and clean subdirectory name
+    ###
     init = re.search("NARS_[0-9]+|BJOR_[0-9]+|B[0-9]+", path).group(0)
     return re.sub("^B(?=[0-9])","BJOR_", init)
 
