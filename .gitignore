@@ -30,6 +30,7 @@ runs/*
 data/*
 data/images/*
 !data/Processed
+!data/**.jpg
 !data/*.yaml
 !data/hyps
 !data/scripts
