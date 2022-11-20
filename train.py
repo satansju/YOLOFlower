@@ -15,7 +15,7 @@ Datasets:   https://github.com/ultralytics/yolov5/tree/master/data
 Tutorial:   https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data
 """
 
-from slicing.dataset_splitting import create_dataset, create_dataloader_from_dataset, LoadFlower
+from slicing.dataset_splitting import create_dataset_flower, create_dataloader_from_dataset_flower, LoadFlower
 from utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, select_device, smart_DDP, smart_optimizer,
                                smart_resume, torch_distributed_zero_first)
 from utils.plots import plot_evolve
@@ -184,27 +184,31 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     ############ Modified ####################
     # Modified data splitting to fix data leakage across images from the same source
-    train_dataset, val_dataset, test_dataset, train_meta, val_meta, test_meta = create_dataset(
-        path,
+    train_dataset, val_dataset, test_dataset = create_dataset_flower(
+        train_path,
         imgsz,
         batch_size // WORLD_SIZE,
         gs,
         single_cls,
         hyp=hyp,
-        augment=True,
+        # augment=True,
         cache=None if opt.cache == 'val' else opt.cache,
         rect=opt.rect,
-        rank=LOCAL_RANK,
-        workers=workers,
-        image_weights=opt.image_weights,
-        quad=opt.quad,
-        prefix=colorstr('train: '),
-        shuffle=True
-        ).split(
+        prefix=colorstr('train: ')
+        ).split_data(
         proportions=[80, 16, 4],
         stratification_level=1)
         
-    train_loader, val_loader, test_loader = (create_dataloader(i) for i in [train_dataset, val_dataset, train_dataset])
+    train_loader, val_loader, test_loader = \
+        (create_dataloader_from_dataset_flower(
+            i, 
+            batch_size = batch_size,
+            rank=LOCAL_RANK,
+            workers=workers,
+            image_weights=opt.image_weights,
+            quad=opt.quad,
+            shuffle=True
+            ) for i in [train_dataset, val_dataset, test_dataset])
 
     ##########################################
 
@@ -224,7 +228,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     #                                           quad=opt.quad,
     #                                           prefix=colorstr('train: '),
     #                                           shuffle=True)
-    labels = np.concatenate(train_dataset.labels, 0)
+    labels = np.concatenate(train_dataset.dataset.labels, 0)
     mlc = int(labels[:, 0].max())  # max label class
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
@@ -262,7 +266,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     hyp['label_smoothing'] = opt.label_smoothing
     model.nc = nc  # attach number of classes to model
     model.hyp = hyp  # attach hyperparameters to model
-    model.class_weights = labels_to_class_weights(train_dataset.labels, nc).to(device) * nc  # attach class weights
+    model.class_weights = labels_to_class_weights(train_dataset.dataset, nc).to(device) * nc  # attach class weights
     model.names = names
 
     # Start training
@@ -289,8 +293,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
             cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
-            iw = labels_to_image_weights(train_dataset.labels, nc=nc, class_weights=cw)  # image weights
-            train_dataset.indices = random.choices(range(train_dataset.n), weights=iw, k=train_dataset.n)  # rand weighted idx
+            iw = labels_to_image_weights(train_dataset.dataset.labels, nc=nc, class_weights=cw)  # image weights
+            train_dataset.dataset.indices = random.choices(range(train_dataset.dataset.n), weights=iw, k=train_dataset.dataset.n)  # rand weighted idx
 
         # Update mosaic border (optional)
         # b = int(random.uniform(0.25 * imgsz, 0.75 * imgsz + gs) // gs * gs)
