@@ -11,9 +11,11 @@ from tqdm import tqdm
 
 from slicing import slice_image
 
+from typing import Dict, List, Tuple
+
 verbose_global = False
 
-def read_directories(path : str) -> tuple[str, str, str]:
+def read_directories(path : str) -> Tuple[str, str, str]:
     with open(path, "r") as f:
         lines = f.readlines()
         lines = [i[:-1] for i in lines]

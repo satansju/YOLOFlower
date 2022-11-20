@@ -10,6 +10,7 @@ from data_cleaning import clean_filename, get_series
 import random
 import numpy as np
 from math import floor
+from typing import Dict, List, Tuple
 
 def equal_integer_partition(n : int, l : int):
     base = np.floor(n/l).astype(np.int32)
@@ -18,7 +19,7 @@ def equal_integer_partition(n : int, l : int):
     out[random.sample(range(l), left)] += 1
     return out
 
-def resize_images(src: str, dst: str, resolution: tuple[int, int], out_ext: str = "jpg", num_subset : int = None, verbose: bool = False) -> None:
+def resize_images(src: str, dst: str, resolution: Tuple[int, int], out_ext: str = "jpg", num_subset : int = None, verbose: bool = False) -> None:
     if len(resolution) != 2:
         raise ValueError("Resolution must be a tuple of length 2.")
 

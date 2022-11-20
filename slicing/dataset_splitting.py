@@ -3,7 +3,7 @@ import os
 import pandas as pd
 from torch.utils.data import Subset
 from torch.utils.data import WeightedRandomSampler
-import typing
+from typing import Dict, List, Tuple
 
 from utils.dataloaders import * 
 
@@ -21,7 +21,7 @@ class LoadFlower(LoadImagesAndLabels):
         print(args)
         self.batch_size = args[1]
 
-    def split_data(self, proportions: list[float] or list[int] = [80, 16, 4], stratification_level: int = 1) -> list[Subset]:
+    def split_data(self, proportions: List[float] or List[int] = [80, 16, 4], stratification_level: int = 1) -> List[Subset]:
         proportions = [i / sum(proportions) for i in proportions]
 
         def group_split(ind, proportions, groups):
