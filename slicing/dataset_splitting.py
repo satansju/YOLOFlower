@@ -56,18 +56,15 @@ class LoadFlower(LoadImagesAndLabels):
             groups=self.path_tree.iloc[:, :stratification_level].apply(
                 lambda x: ','.join(x.dropna().astype(str)), axis=1)
         )
-
-        datasets = [Subset(self, ind) for ind in splits]
-        [setattr(dataset, "dataset", self.__subset_attr(ind)) for dataset, ind in zip(datasets, splits)]
         
-        print(datasets[0].dataset)
+        datasets = [self.__subset_dataset(ind) for ind in splits]
 
         return tuple([*datasets])
     
-    def __subset_attr(self, ind):
+    def __subset_dataset(self, ind):
         n = len(self)
         
-        sub = LoadFlower(simple = True)
+        sub = Subset(self, indices=ind)
         
         for k, v in self.__dict__.items():
             if hasattr(v, "__len__") and len(v) == n:
