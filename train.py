@@ -228,7 +228,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     #                                           quad=opt.quad,
     #                                           prefix=colorstr('train: '),
     #                                           shuffle=True)
-    labels = np.concatenate(train_dataset.dataset.labels, 0)
+    labels = np.concatenate(train_dataset.labels, 0)
     mlc = int(labels[:, 0].max())  # max label class
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
@@ -266,7 +266,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     hyp['label_smoothing'] = opt.label_smoothing
     model.nc = nc  # attach number of classes to model
     model.hyp = hyp  # attach hyperparameters to model
-    model.class_weights = labels_to_class_weights(train_dataset.dataset, nc).to(device) * nc  # attach class weights
+    model.class_weights = labels_to_class_weights(train_dataset, nc).to(device) * nc  # attach class weights
     model.names = names
 
     # Start training
@@ -293,8 +293,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         # Update image weights (optional, single-GPU only)
         if opt.image_weights:
             cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
-            iw = labels_to_image_weights(train_dataset.dataset.labels, nc=nc, class_weights=cw)  # image weights
-            train_dataset.dataset.indices = random.choices(range(train_dataset.dataset.n), weights=iw, k=train_dataset.dataset.n)  # rand weighted idx
+            iw = labels_to_image_weights(train_dataset.labels, nc=nc, class_weights=cw)  # image weights
+            train_dataset.indices = random.choices(range(train_dataset.n), weights=iw, k=train_dataset.n)  # rand weighted idx
 
         # Update mosaic border (optional)
         # b = int(random.uniform(0.25 * imgsz, 0.75 * imgsz + gs) // gs * gs)
