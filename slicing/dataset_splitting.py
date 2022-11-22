@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 from utils.dataloaders import * 
 
+# from matplotlib import pyplot as plt
 
 class LoadFlower(LoadImagesAndLabels):
     def __init__(self, *args, **kwargs):
@@ -118,7 +119,6 @@ def create_dataset_flower(path,
 
     return dataset
 
-
 def create_dataloader_from_dataset_flower(dataset,
                                           batch_size,
                                           rank=-1,
@@ -133,9 +133,20 @@ def create_dataloader_from_dataset_flower(dataset,
     loader = DataLoader if image_weights else InfiniteDataLoader  # only DataLoader allows for attribute updates
     generator = torch.Generator()
     generator.manual_seed(6148914691236517205 + RANK)
+    
+    def image_weight(labels):
+        labels = labels[:,0]
+        tab = np.zeros(5)
+        for i in labels:
+            tab[int(i)] += 1
+        tab = tab/len(labels)
+        entropy = tab * np.log(tab)
+        entropy[np.isnan(entropy)] = 0
+        return -sum(entropy) * np.log(len(labels) + 1)
 
-    weights = [1 for i in range(len(dataset))]
-
+    weights = np.array([image_weight(i) for i in dataset.labels]) # Not necessary to sum to 1, see documentation of WeightedRandomSampler
+    # fig = plt.hist(weights, 100) 
+    # plt.savefig("../weight_histogram.png")
     sampler = WeightedRandomSampler(weights=weights, num_samples=len(
         dataset), generator=generator) if rank == -1 else distributed.DistributedSampler(dataset, shuffle=shuffle)
 
