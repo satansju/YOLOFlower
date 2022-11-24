@@ -15,7 +15,6 @@ Datasets:   https://github.com/ultralytics/yolov5/tree/master/data
 Tutorial:   https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data
 """
 
-from slicing.dataset_splitting import create_dataset_flower, create_dataloader_from_dataset_flower, LoadFlower
 from utils.torch_utils import (EarlyStopping, ModelEMA, de_parallel, select_device, smart_DDP, smart_optimizer,
                                smart_resume, torch_distributed_zero_first)
 from utils.plots import plot_evolve
@@ -52,6 +51,8 @@ import torch.nn as nn
 import yaml
 from torch.optim import lr_scheduler
 from tqdm import tqdm
+
+from slicing.dataset_splitting import create_dataset_flower, create_dataloader_from_dataset_flower, LoadFlower
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
