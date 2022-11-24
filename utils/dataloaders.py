@@ -446,7 +446,8 @@ class LoadImagesAndLabels(Dataset):
                  stride=32,
                  pad=0.0,
                  min_items=0,
-                 prefix=''):
+                 prefix='',
+                 num_files=None):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -473,6 +474,9 @@ class LoadImagesAndLabels(Dataset):
                         # f += [p.parent / x.lstrip(os.sep) for x in t]  # local to global path (pathlib)
                 else:
                     raise FileNotFoundError(f'{prefix}{p} does not exist')
+            if num_files:
+                assert num_files <= len(f)
+                f = [f[i] for i in random.sample(range(len(f)), num_files)]
             self.im_files = sorted(x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS)
             # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in IMG_FORMATS])  # pathlib
             assert self.im_files, f'{prefix}No images found'

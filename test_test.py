@@ -1,4 +1,6 @@
 from slicing.dataset_splitting import create_dataset_flower, create_dataloader_from_dataset_flower
+import numpy as np
+import time
 
 def main():
     train_dataset, val_dataset, test_dataset = create_dataset_flower(
@@ -6,7 +8,8 @@ def main():
         640,
         16,
         1,
-        cache=False
+        cache=False,
+        num_files=1000
     ).split_data(
         proportions=[80, 16, 4],
         stratification_level=1
@@ -27,9 +30,9 @@ def main():
     #             print(k, f'({get_classes(v)})', ":", len(v))
     #         else:
     #             print(k, f'({get_classes(v)})', "=", v)
-
-
-    create_dataloader_from_dataset_flower(train_dataset, 16)
+    start = time.process_time()
+    dataloader = create_dataloader_from_dataset_flower(train_dataset, 16)
+    print("Dataloader initialization time :", time.process_time() - start)
 
 if __name__ == '__main__':
     main()
