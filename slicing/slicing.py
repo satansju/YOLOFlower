@@ -9,7 +9,7 @@ import shutil
 import time
 from email.mime import image
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 import numpy as np
 from coco import Coco, CocoAnnotation, CocoImage, create_coco_dict
@@ -237,7 +237,7 @@ class SliceImageResult:
     def __len__(self):
         return len(self._sliced_image_list)
 
-def read_yolo(path: str) -> list[tuple]:
+def read_yolo(path: str) -> List[Tuple]:
     if not os.path.exists(path):
         return []
     
@@ -251,7 +251,7 @@ def read_yolo(path: str) -> list[tuple]:
 
     return yolo
 
-def yolo_to_coco(yolo: list[tuple], width: int, height: int) -> list[CocoAnnotation]:
+def yolo_to_coco(yolo: List[Tuple], width: int, height: int) -> List[CocoAnnotation]:
     """Convert a CocoAnnotation object to a pythonized YOLO annotation file.
     Args:
         yolo (list(tuple)): an object containing YOLO style annotations as tuples (lines) nested in a list.
@@ -355,7 +355,7 @@ def slice_image(
         if yolo_annotation is not None:
             Path(label_dst).mkdir(parents=True, exist_ok=True)
 
-    def export_single_slice(image: np.ndarray, annotation: Optional[list[tuple]], slice_file_name: str):
+    def export_single_slice(image: np.ndarray, annotation: Optional[List[Tuple]], slice_file_name: str):
         if annotation is not None and len(annotation) < min_out_slice_annotations:
             return
         slice_file_name_base = re.sub(f"{out_ext}$", "", slice_file_name)
