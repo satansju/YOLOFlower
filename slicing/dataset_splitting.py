@@ -9,9 +9,7 @@ from utils.dataloaders import *
 
 class LoadFlower(LoadImagesAndLabels):
     def __init__(self, *args, **kwargs):
-        if "simple" in kwargs:
-            return        
-        kwargs = {k : v for k, v in kwargs.items() if not k == "simple"}
+        kwargs = {k : v for k, v in kwargs.items()}
         super().__init__(*args, **kwargs)
         path_tree = pd.concat(
                 [
@@ -100,7 +98,8 @@ def create_dataset_flower(path,
                           image_weights=False,
                           prefix='',
                           rank=-1,
-                          num_files=None):
+                          num_files=None,
+                          min_items=1):
     with torch_distributed_zero_first(rank):  # init dataset *.cache only once if DDP
         dataset = LoadFlower(
             path,
@@ -115,7 +114,8 @@ def create_dataset_flower(path,
             pad=pad,
             image_weights=image_weights,
             prefix=prefix,
-            num_files=num_files)
+            num_files=num_files,
+            min_items=min_items)
 
     return dataset
 
@@ -131,29 +131,30 @@ def create_dataloader_from_dataset_flower(dataset,
 
     nd = torch.cuda.device_count()  # number of CUDA devices
     nw = min([os.cpu_count() // max(nd, 1), batch_size if batch_size > 1 else 0, workers])  # number of workers
-    loader = DataLoader # if image_weights else InfiniteDataLoader  # only DataLoader allows for attribute updates
+    # loader = DataLoader # if image_weights else InfiniteDataLoader  # only DataLoader allows for attribute updates
     generator = torch.Generator()
     generator.manual_seed(6148914691236517205 + RANK)
     
     def image_weight(labels):
         if labels.shape[0] == 1:
-            return -1/2 * np.log(1/2) * np.log(2) 
-        labels = labels[:, 0] # Subset only the labels, i.e. remove the coordinates
-        counts = np.zeros(5)
-        for i in labels:
-            counts[int(i)] += 1
-        counts = counts/(len(labels) + 1) # Normalize counts
-        entropy = counts * np.log(counts) # Calculate Shannon Entropy
-        entropy[np.isnan(entropy)] = 0 # Set NaN to zero, since these are generated when a count = 0, where log(0) = Inf-
-        return -np.sum(entropy, 0) * np.log(len(labels) + 1) # Return the product of the entropy and the log of the number of labels (+1).
+            weight = -1/2 * np.log(1/2) * np.log(2)
+        else:
+            labels = np.round(labels[:, 0]).astype(np.int64) # Subset only the labels, i.e. remove the coordinates
+            counts = np.bincount(labels, minlength=5).astype(np.float64)
+            counts[counts == 0] = 1
+            counts = counts/np.sum(counts) # Normalize counts
+            entropy = counts * np.log(counts) # Calculate Shannon Entropy
+            # Isn't needed as long as counts cannot contains zeros 
+            # entropy[np.isnan(entropy)] = 0 # Set NaN to zero, since these are generated when a count = 0, where log(0) = Inf-
+            weight = -np.sum(entropy, 0) * np.log(max(5, len(labels))) # Return the product of the entropy and the log of the number of labels (+1).
+        return weight / (weight ** (1 - gamma))
 
     weights = [image_weight(i) for i in dataset.labels] # Not necessary to sum to 1, see documentation of WeightedRandomSampler
-    weights = [i / (i ** gamma) for i in weights]
     sampler = WeightedRandomSampler(weights=weights, 
                                     num_samples=len(dataset), 
                                     generator=generator) if rank == -1 else distributed.DistributedSampler(dataset, shuffle=shuffle)
 
-    return loader(dataset,
+    return DataLoader(dataset,
                   batch_size=batch_size,
                   shuffle=shuffle and sampler is None,
                   num_workers=nw,
