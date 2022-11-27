@@ -67,9 +67,9 @@ WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 
 
 def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictionary
-    save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze, gamma = \
+    save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze, gamma, min_items, dataset_size = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
-        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze, opt.gamma
+        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze, opt.gamma, opt.min_items, opt.dataset_size
     callbacks.run('on_pretrain_routine_start')
 
     # Directories
@@ -185,23 +185,26 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     ############ Modified ####################
     # Modified data splitting to fix data leakage across images from the same source
-    train_dataset, val_dataset, test_dataset = create_dataset_flower(
-        train_path,
-        imgsz,
-        batch_size // WORLD_SIZE,
-        gs,
-        single_cls,
-        hyp=hyp,
-        # augment=True,
-        cache=None if opt.cache == 'val' else opt.cache,
-        rect=opt.rect,
-        prefix=colorstr('train: ')
+    train_dataset, val_dataset, test_dataset = \
+        create_dataset_flower(
+            train_path,
+            imgsz,
+            batch_size // WORLD_SIZE,
+            gs,
+            hyp=hyp,
+            augment=True,
+            cache=None if opt.cache == 'val' else opt.cache,
+            rect=opt.rect,
+            prefix=colorstr('train: '),
+            num_files=dataset_size,
+            min_items=min_items
         ).split_data(
-        proportions=[80, 16, 4],
-        stratification_level=1)
+            proportions=[80, 16, 4],
+            stratification_level=1
+        )
         
-    train_loader, val_loader, test_loader = \
-        (create_dataloader_from_dataset_flower(
+    train_loader, val_loader, test_loader = (
+        create_dataloader_from_dataset_flower(
             i, 
             batch_size = batch_size,
             rank=LOCAL_RANK,
@@ -209,8 +212,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             image_weights=opt.image_weights,
             quad=opt.quad,
             shuffle=True,
-            gamma=gamma
-            ) for i in [train_dataset, val_dataset, test_dataset])
+            gamma=gamma,
+            training=t
+            ) \
+        for i, t in zip([train_dataset, val_dataset, test_dataset], [True, False, False])
+        )
 
     ##########################################
 
@@ -505,6 +511,8 @@ def parse_opt(known=False):
     
     # Custom arguments
     parser.add_argument('--gamma', type=float, default=1, help='Degree of sample weighting')
+    parser.add_argument('--min_items', type=int, default=1, help='Minimum number of bounding boxes in the training data.')
+    parser.add_argument('--dataset_size', type=int, default=None, help='Maximum number of images in dataset.')
 
     return parser.parse_known_args()[0] if known else parser.parse_args()
 

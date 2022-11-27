@@ -195,6 +195,13 @@ def run(
     callbacks.run('on_val_start')
     pbar = tqdm(dataloader, desc=s, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')  # progress bar
     for batch_i, (im, targets, paths, shapes) in enumerate(pbar):
+        
+        # print("im:", im, "\ntargets:", targets, "\npaths:", paths, "\nshapes:", shapes)
+        
+        for ind, s in enumerate(shapes):
+            if s is None:
+                shapes[ind] = [None, None]
+        
         callbacks.run('on_val_batch_start')
         with dt[0]:
             if cuda:
@@ -243,12 +250,14 @@ def run(
             if single_cls:
                 pred[:, 5] = 0
             predn = pred.clone()
-            scale_boxes(im[si].shape[1:], predn[:, :4], shape, shapes[si][1])  # native-space pred
+            if shape is not None: 
+                scale_boxes(im[si].shape[1:], predn[:, :4], shape, shapes[si][1])  # native-space pred
 
             # Evaluate
             if nl:
                 tbox = xywh2xyxy(labels[:, 1:5])  # target boxes
-                scale_boxes(im[si].shape[1:], tbox, shape, shapes[si][1])  # native-space labels
+                if shape is not None:
+                    scale_boxes(im[si].shape[1:], tbox, shape, shapes[si][1])  # native-space labels
                 labelsn = torch.cat((labels[:, 0:1], tbox), 1)  # native-space labels
                 correct = process_batch(predn, labelsn, iouv)
                 if plots:

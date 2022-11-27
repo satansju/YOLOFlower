@@ -126,7 +126,8 @@ def create_dataloader_from_dataset_flower(dataset,
                                           image_weights=False,
                                           quad=False,
                                           shuffle=False, 
-                                          gamma=1):
+                                          gamma=1,
+                                          training=True):
     batch_size = min(batch_size, len(dataset))
 
     nd = torch.cuda.device_count()  # number of CUDA devices
@@ -149,7 +150,7 @@ def create_dataloader_from_dataset_flower(dataset,
             weight = -np.sum(entropy, 0) * np.log(max(5, len(labels))) # Return the product of the entropy and the log of the number of labels (+1).
         return weight / (weight ** (1 - gamma))
 
-    weights = [image_weight(i) for i in dataset.labels] # Not necessary to sum to 1, see documentation of WeightedRandomSampler
+    weights = [image_weight(i) if training else 1 for i in dataset.labels] # Not necessary to sum to 1, see documentation of WeightedRandomSampler
     sampler = WeightedRandomSampler(weights=weights, 
                                     num_samples=len(dataset), 
                                     generator=generator) if rank == -1 else distributed.DistributedSampler(dataset, shuffle=shuffle)
