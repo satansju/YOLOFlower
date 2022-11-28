@@ -11,9 +11,8 @@ for gamma in [0, .5, 1, 1.5, 2]:
         data="data/Flower.yaml", 
         hyp="data/hyps/FlowerHyp.yaml", 
         cache="RAM", 
-        name=re.sub("\.", "_", f'test_exp_{gamma}_test'),
+        name=re.sub("\.", "_", f'test_exp_{gamma}_break'),
         gamma=float(gamma),
-        min_items=0,
-        dataset_size=100
+        min_items=3
     )
-    print("TEST")
+    break

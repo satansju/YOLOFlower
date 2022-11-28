@@ -518,6 +518,8 @@ def parse_opt(known=False):
 
 
 def main(opt, callbacks=Callbacks()):
+    callbacks=Callbacks()
+    
     # Checks
     if RANK in {-1, 0}:
         print_args(vars(opt))
