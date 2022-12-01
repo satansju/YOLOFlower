@@ -67,9 +67,9 @@ WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 
 
 def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictionary
-    save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze, gamma, min_items, dataset_size = \
+    save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze, gamma, min_items, dataset_size, deterministic, use_class_weights = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
-        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze, opt.gamma, opt.min_items, opt.dataset_size
+        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze, opt.gamma, opt.min_items, opt.dataset_size, opt.deterministic, opt.class_weights
     callbacks.run('on_pretrain_routine_start')
 
     # Directories
@@ -106,7 +106,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     # Config
     plots = not evolve and not opt.noplots  # create plots
     cuda = device.type != 'cpu'
-    init_seeds(opt.seed + 1 + RANK, deterministic=True)
+    if deterministic:
+        init_seeds(opt.seed + 1 + RANK, deterministic=True)
     with torch_distributed_zero_first(LOCAL_RANK):
         data_dict = data_dict or check_dataset(data)  # check if None
     train_path, val_path = data_dict['train'], data_dict['val']
@@ -129,7 +130,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
     else:
         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
-    amp = check_amp(model)  # check AMP
+    amp = False # check_amp(model)  # check AMP
 
     # Freeze
     freeze = [f'model.{x}.' for x in (freeze if len(freeze) > 1 else range(freeze[0]))]  # layers to freeze
@@ -185,8 +186,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
 
     ############ Modified ####################
     # Modified data splitting to fix data leakage across images from the same source
-    train_dataset, val_dataset, test_dataset = \
-        create_dataset_flower(
+    all_data = create_dataset_flower(
             train_path,
             imgsz,
             batch_size // WORLD_SIZE,
@@ -198,8 +198,14 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             prefix=colorstr('train: '),
             num_files=dataset_size,
             min_items=min_items
-        ).split_data(
-            proportions=[80, 16, 4],
+        )
+    
+    if not gamma == 0:
+        sample_weights = all_data.weights(gamma=gamma)
+        sample_weights = [len(sample_weights)/sum(sample_weights) *  i for i in sample_weights]
+    
+    train_dataset, val_dataset, test_dataset = all_data.split_data(
+            proportions=[80, 20, 0],
             stratification_level=1
         )
         
@@ -211,13 +217,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             workers=workers,
             image_weights=opt.image_weights,
             quad=opt.quad,
-            shuffle=True,
-            gamma=gamma,
-            training=t
+            shuffle=True
             ) \
-        for i, t in zip([train_dataset, val_dataset, test_dataset], [True, False, False])
+        for i in [train_dataset, val_dataset, test_dataset]
         )
-
+        
     ##########################################
 
     # # Trainloader
@@ -288,13 +292,14 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     scheduler.last_epoch = start_epoch - 1  # do not move
     scaler = torch.cuda.amp.GradScaler(enabled=amp)
     stopper, stop = EarlyStopping(patience=opt.patience), False
-    compute_loss = ComputeLoss(model)  # init loss class
+    compute_loss = ComputeLoss(model, sample_weights, use_class_weights)  # init loss class
     callbacks.run('on_train_start')
     LOGGER.info(f'Image sizes {imgsz} train, {imgsz} val\n'
                 f'Using {train_loader.num_workers * WORLD_SIZE} dataloader workers\n'
                 f"Logging results to {colorstr('bold', save_dir)}\n"
                 f'Starting training for {epochs} epochs...')
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
+        compute_loss.training = True
         callbacks.run('on_train_epoch_start')
         model.train()
 
@@ -316,7 +321,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         if RANK in {-1, 0}:
             pbar = tqdm(pbar, total=nb, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')  # progress bar
         optimizer.zero_grad()
-        for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
+        for i, (imgs, targets, paths, ind) in pbar:  # batch -------------------------------------------------------------
             callbacks.run('on_train_batch_start')
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255  # uint8 to float32, 0-255 to 0.0-1.0
@@ -343,7 +348,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             # Forward
             with torch.cuda.amp.autocast(amp):
                 pred = model(imgs)  # forward
-                loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
+                loss, loss_items = compute_loss(pred, targets.to(device), ind)  # loss scaled by batch_size
                 if RANK != -1:
                     loss *= WORLD_SIZE  # gradient averaged between devices in DDP mode
                 if opt.quad:
@@ -374,6 +379,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                     return
             # end batch ------------------------------------------------------------------------------------------------
 
+        compute_loss.training = False
         # Scheduler
         lr = [x['lr'] for x in optimizer.param_groups]  # for loggers
         scheduler.step()
@@ -456,7 +462,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                         verbose=True,
                         plots=plots,
                         callbacks=callbacks,
-                        compute_loss=compute_loss)  # val best model with plots
+                        compute_loss=compute_loss,
+                        half=amp)  # val best model with plots
                     if is_coco:
                         callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness, fi)
 
@@ -510,9 +517,11 @@ def parse_opt(known=False):
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
     
     # Custom arguments
-    parser.add_argument('--gamma', type=float, default=1, help='Degree of sample weighting')
+    parser.add_argument('--gamma', type=float, default=0, help='Degree of sample weighted loss.')
     parser.add_argument('--min_items', type=int, default=1, help='Minimum number of bounding boxes in the training data.')
     parser.add_argument('--dataset_size', type=int, default=None, help='Maximum number of images in dataset.')
+    parser.add_argument('--deterministic', type=bool, default=True, help='Train the model deterministically?')
+    parser.add_argument('--class_weights', type=bool, default=False, help='Use inverse class frequency weighted loss.')
 
     return parser.parse_known_args()[0] if known else parser.parse_args()
 

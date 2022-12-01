@@ -171,6 +171,22 @@ class Loggers():
         log_dict = dict(zip(self.keys[0:3], vals))
         # Callback runs on train batch end
         # ni: number integrated batches (since train start)
+        x = dict(zip(self.keys, vals))
+        if self.csv:
+            file = self.save_dir / 'results_batch.csv'
+            n = len(x) + 1  # number of cols
+            s = '' if file.exists() else (('%20s,' * n % tuple(['batch'] + self.keys[:n - 1])).rstrip(',') + '\n')  # add header
+            with open(file, 'a') as f:
+                f.write(s + ('%20.5g,' * n % tuple([ni] + vals)).rstrip(',') + '\n')
+                
+        if self.tb:
+            for k, v in x.items():
+                self.tb.add_scalar(k, v, ni)
+        elif self.clearml:  # log to ClearML if TensorBoard not used
+            for k, v in x.items():
+                title, series = k.split('/')
+                self.clearml.task.get_logger().report_scalar(title, series, v, ni)
+                
         if self.plots:
             if ni < 3:
                 f = self.save_dir / f'train_batch{ni}.jpg'  # filename

@@ -185,6 +185,16 @@ class ConfusionMatrix:
         fp = self.matrix.sum(1) - tp  # false positives
         # fn = self.matrix.sum(0) - tp  # false negatives (missed detections)
         return tp[:-1], fp[:-1]  # remove background class
+    
+    def save(self, normalize=True, save_dir='', names=()):
+        array = self.matrix / ((self.matrix.sum(0).reshape(1, -1) + 1E-9) if normalize else 1)  # normalize columns
+
+        classes = names + ['background']
+        
+        with open(Path(save_dir) / "confusion_matrix.csv", "a") as f:
+            f.write("Predicted/True\t" + "\t".join(classes) + "\n")
+            for i, name in enumerate(classes):
+                f.write(name + "\t" + "\t".join([str(i) for i in array[i,:]]) + "\n")
 
     @TryExcept('WARNING ⚠️ ConfusionMatrix plot failure')
     def plot(self, normalize=True, save_dir='', names=()):

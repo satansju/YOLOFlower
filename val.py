@@ -194,13 +194,11 @@ def run(
     jdict, stats, ap, ap_class = [], [], [], []
     callbacks.run('on_val_start')
     pbar = tqdm(dataloader, desc=s, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')  # progress bar
-    for batch_i, (im, targets, paths, shapes) in enumerate(pbar):
+    for batch_i, (im, targets, paths, ind) in enumerate(pbar):
         
         # print("im:", im, "\ntargets:", targets, "\npaths:", paths, "\nshapes:", shapes)
         
-        for ind, s in enumerate(shapes):
-            if s is None:
-                shapes[ind] = [None, None]
+        shapes = [[None, None] for i in ind]
         
         callbacks.run('on_val_batch_start')
         with dt[0]:
@@ -217,7 +215,7 @@ def run(
 
         # Loss
         if compute_loss:
-            loss += compute_loss(train_out, targets)[1]  # box, obj, cls
+            loss += compute_loss(train_out, targets, ind)[1]  # box, obj, cls
 
         # NMS
         targets[:, 2:] *= torch.tensor((width, height, width, height), device=device)  # to pixels
@@ -296,13 +294,13 @@ def run(
     if (verbose or (nc < 50 and not training)) and nc > 1 and len(stats):
         for i, c in enumerate(ap_class):
             LOGGER.info(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]))
-
+    
     # Print speeds
     t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image
     if not training:
         shape = (batch_size, 3, imgsz, imgsz)
         LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {shape}' % t)
-
+    
     # Plots
     if plots:
         confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
@@ -333,12 +331,22 @@ def run(
             map, map50 = eval.stats[:2]  # update results (mAP@0.5:0.95, mAP@0.5)
         except Exception as e:
             LOGGER.info(f'pycocotools unable to run: {e}')
-
+    
+    # Log final stats and confusion matrix to csv
+    if plots:
+        confusion_matrix.save(normalize = False, save_dir=save_dir, names=list(names.values()))   
+        with open(Path(save_dir) / "class_results.csv", "a") as f:
+            f.write("Class\tImages\tInstances\tP\tR\tmAP50\tmAP50-95\n")
+            f.write("\t".join([str(i) for i in ['all', seen, nt.sum(), mp, mr, map50, map]]) + "\n")
+            for i, c in enumerate(ap_class):
+                f.write("\t".join([str(i) for i in [names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]]]) + "\n")
+    
     # Return results
     model.float()  # for training
     if not training:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
+        
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]

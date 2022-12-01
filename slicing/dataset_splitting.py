@@ -20,7 +20,6 @@ class LoadFlower(LoadImagesAndLabels):
             )
         path_tree_num_unique = path_tree.agg(lambda x: len({i for i in x}))
         self.path_tree = path_tree.loc[:, path_tree_num_unique > 1]
-        print(args)
         self.batch_size = args[1]
 
     def split_data(self, proportions: List[float] or List[int] = [80, 16, 4], stratification_level: int = 1) -> List[Subset]:
@@ -30,7 +29,7 @@ class LoadFlower(LoadImagesAndLabels):
             group_set = {i for i in groups}
 
             n = len(group_set)
-            splits = [max(int(n * i), 1) for i in proportions]
+            splits = [int(n * i) for i in proportions]
             left = n - sum(splits)
             assert left >= 0, print("Number of splits must be smaller than or equal to number of groups.")
             
@@ -59,6 +58,9 @@ class LoadFlower(LoadImagesAndLabels):
                 lambda x: ','.join(x.dropna().astype(str)), axis=1)
         )
         
+        print("TESTING:", len(self.im_files), len(self))
+        print("TESTING:", [len(i) for i in splits])
+        
         datasets = [self.__subset_dataset(ind) for ind in splits]
 
         return tuple([*datasets])
@@ -69,10 +71,12 @@ class LoadFlower(LoadImagesAndLabels):
         sub = Subset(self, indices=ind)
         
         for k, v in self.__dict__.items():
-            if hasattr(v, "__len__") and len(v) == n:
+            if hasattr(v, "__len__") and not n == 0 and len(v) % n == 0:
                 if isinstance(v, pd.DataFrame):
                     setattr(sub, k, v.iloc[ind,:])
                 elif isinstance(v, np.ndarray):
+                    setattr(sub, k, v[ind])
+                elif isinstance(v, torch.Tensor):
                     setattr(sub, k, v[ind])
                 else:
                     try:
@@ -83,6 +87,23 @@ class LoadFlower(LoadImagesAndLabels):
                 setattr(sub, k, v)
                 
         return sub
+    
+    def weights(self, gamma):
+        def single_weight(image_label, gamma):
+            if image_label.shape[0] == 1:
+                weight = -1/2 * np.log(1/2) * np.log(2)
+            else:
+                labels = np.round(image_label[:, 0]).astype(np.int64) # Subset only the labels, i.e. remove the coordinates
+                counts = np.bincount(labels, minlength=5).astype(np.float64)
+                counts[counts == 0] = 1
+                counts = counts/np.sum(counts) # Normalize counts
+                entropy = counts * np.log(counts) # Calculate Shannon Entropy
+                # Isn't needed as long as counts cannot contains zeros 
+                # entropy[np.isnan(entropy)] = 0 # Set NaN to zero, since these are generated when a count = 0, where log(0) = Inf-
+                weight = -np.sum(entropy, 0) * np.log(max(5, len(labels))) # Return the product of the entropy and the log of the number of labels (+1).
+            return weight / (weight ** (1 - gamma))
+        
+        return [single_weight(i, gamma=gamma) for i in self.labels]
 
 
 def create_dataset_flower(path,
@@ -125,37 +146,19 @@ def create_dataloader_from_dataset_flower(dataset,
                                           workers=8,
                                           image_weights=False,
                                           quad=False,
-                                          shuffle=False, 
-                                          gamma=1,
-                                          training=True):
+                                          shuffle=False):
     batch_size = min(batch_size, len(dataset))
 
     nd = torch.cuda.device_count()  # number of CUDA devices
     nw = min([os.cpu_count() // max(nd, 1), batch_size if batch_size > 1 else 0, workers])  # number of workers
     # loader = DataLoader # if image_weights else InfiniteDataLoader  # only DataLoader allows for attribute updates
     generator = torch.Generator()
-    generator.manual_seed(6148914691236517205 + RANK)
+    # generator.manual_seed(6148914691236517205 + RANK)
     
-    def image_weight(labels):
-        if labels.shape[0] == 1:
-            weight = -1/2 * np.log(1/2) * np.log(2)
-        else:
-            labels = np.round(labels[:, 0]).astype(np.int64) # Subset only the labels, i.e. remove the coordinates
-            counts = np.bincount(labels, minlength=5).astype(np.float64)
-            counts[counts == 0] = 1
-            counts = counts/np.sum(counts) # Normalize counts
-            entropy = counts * np.log(counts) # Calculate Shannon Entropy
-            # Isn't needed as long as counts cannot contains zeros 
-            # entropy[np.isnan(entropy)] = 0 # Set NaN to zero, since these are generated when a count = 0, where log(0) = Inf-
-            weight = -np.sum(entropy, 0) * np.log(max(5, len(labels))) # Return the product of the entropy and the log of the number of labels (+1).
-        return weight / (weight ** (1 - gamma))
+    sampler = None if rank == -1 else distributed.DistributedSampler(dataset, shuffle=shuffle)
+    loader = DataLoader if image_weights else InfiniteDataLoader  # only DataLoader allows for attribute updates
 
-    weights = [image_weight(i) if training else 1 for i in dataset.labels] # Not necessary to sum to 1, see documentation of WeightedRandomSampler
-    sampler = WeightedRandomSampler(weights=weights, 
-                                    num_samples=len(dataset), 
-                                    generator=generator) if rank == -1 else distributed.DistributedSampler(dataset, shuffle=shuffle)
-
-    return DataLoader(dataset,
+    return loader(dataset,
                   batch_size=batch_size,
                   shuffle=shuffle and sampler is None,
                   num_workers=nw,
@@ -163,4 +166,4 @@ def create_dataloader_from_dataset_flower(dataset,
                   pin_memory=PIN_MEMORY,
                   collate_fn=LoadImagesAndLabels.collate_fn4 if quad else LoadImagesAndLabels.collate_fn,
                   worker_init_fn=seed_worker,
-                  generator=generator)
+                  generator=generator) if not len(dataset) == 0 else None
