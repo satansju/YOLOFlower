@@ -72,8 +72,8 @@ class QFocalLoss(nn.Module):
         self.reduction = loss_fcn.reduction
         self.loss_fcn.reduction = 'none'  # required to apply FL to each element
 
-    def forward(self, pred, true):
-        loss = self.loss_fcn(pred, true)
+    def forward(self, pred, true, ind):
+        loss = self.loss_fcn(pred, true, ind)
 
         pred_prob = torch.sigmoid(pred)  # prob from logits
         alpha_factor = true * self.alpha + (1 - true) * (1 - self.alpha)
@@ -92,13 +92,18 @@ class ComputeLoss:
     sort_obj_iou = False
 
     # Compute losses
-    def __init__(self, model, autobalance=False):
+    def __init__(self, model, weights, use_class_weights, autobalance=False):
         device = next(model.parameters()).device  # get model device
         h = model.hyp  # hyperparameters
 
+        # Sample weights
+        if not weights is None:
+            weights = torch.tensor(weights, device=device)
+            self.globalweights = weights
+        
         # Define criteria
-        BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
-        BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=device))
+        BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(h["cls_pw"], device=device))
+        BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(h['obj_pw'], device=device))
 
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
@@ -117,13 +122,24 @@ class ComputeLoss:
         self.nl = m.nl  # number of layers
         self.anchors = m.anchors
         self.device = device
+        
+        # Custom
+        self.training = False
+        self.use_sample_weights = not weights is None
+        self.use_class_weights = use_class_weights
+        if self.use_class_weights:
+            self.cls_w = torch.tensor([h['cls_pw'] * float(i) for i in model.class_weights.detach().cpu().numpy()], device=device)
 
-    def __call__(self, p, targets):  # predictions, targets
+    def __call__(self, p, targets, ind):  # predictions, targets
         lcls = torch.zeros(1, device=self.device)  # class loss
         lbox = torch.zeros(1, device=self.device)  # box loss
         lobj = torch.zeros(1, device=self.device)  # object loss
         tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
 
+        if self.use_sample_weights:
+            weights = torch.tensor([self.globalweights[i] for i in ind], device=self.device)
+            weights /= weights.sum()
+        
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
             b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
@@ -154,12 +170,17 @@ class ComputeLoss:
                 if self.nc > 1:  # cls loss (only if multiple classes)
                     t = torch.full_like(pcls, self.cn, device=self.device)  # targets
                     t[range(n), tcls[i]] = self.cp
+                    if self.training and self.use_class_weights:
+                        self.BCEcls.pos_weight = self.cls_w.repeat(t.shape[0], 1)
+                    if self.training and self.use_sample_weights:
+                        self.BCEcls.weight = weights[b].reshape(-1, 1)
                     lcls += self.BCEcls(pcls, t)  # BCE
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
-
+            if self.training and self.use_sample_weights:
+                self.BCEobj.weight = weights.reshape(-1, 1, 1, 1)
             obji = self.BCEobj(pi[..., 4], tobj)
             lobj += obji * self.balance[i]  # obj loss
             if self.autobalance:
