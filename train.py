@@ -203,6 +203,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     if not gamma == 0:
         sample_weights = all_data.weights(gamma=gamma)
         sample_weights = [len(sample_weights)/sum(sample_weights) *  i for i in sample_weights]
+    else:
+        sample_weights = None
     
     train_dataset, val_dataset, test_dataset = all_data.split_data(
             proportions=[80, 20, 0],
