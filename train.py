@@ -67,9 +67,12 @@ WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
 
 
 def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictionary
-    save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze, gamma, min_items, dataset_size, deterministic, use_class_weights = \
+    save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze, \
+        gamma, min_items, dataset_size, deterministic, use_class_weights, anchors = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
-        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze, opt.gamma, opt.min_items, opt.dataset_size, opt.deterministic, opt.class_weights
+        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze, \
+        opt.gamma, opt.min_items, opt.dataset_size, opt.deterministic, opt.class_weights, opt.anchors
+    
     callbacks.run('on_pretrain_routine_start')
 
     # Directories
@@ -81,6 +84,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     if isinstance(hyp, str):
         with open(hyp, errors='ignore') as f:
             hyp = yaml.safe_load(f)  # load hyps dict
+        if anchors:
+            hyp["anchors"] = anchors # override anchors if specified
     LOGGER.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
     opt.hyp = hyp.copy()  # for saving hyps to checkpoints
 
@@ -519,8 +524,9 @@ def parse_opt(known=False):
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
     
     # Custom arguments
+    parser.add_argument('--anchors', type=float, default=None, help='Overwrite number of anchors in model.yaml.')
     parser.add_argument('--gamma', type=float, default=0, help='Degree of sample weighted loss.')
-    parser.add_argument('--min_items', type=int, default=1, help='Minimum number of bounding boxes in the training data.')
+    parser.add_argument('--min_items', type=int, default=0, help='Minimum number of bounding boxes in the training data.')
     parser.add_argument('--dataset_size', type=int, default=None, help='Maximum number of images in dataset.')
     parser.add_argument('--deterministic', type=bool, default=True, help='Train the model deterministically?')
     parser.add_argument('--class_weights', type=bool, default=False, help='Use inverse class frequency weighted loss.')
@@ -618,6 +624,8 @@ def main(opt, callbacks=Callbacks()):
             hyp = yaml.safe_load(f)  # load hyps dict
             if 'anchors' not in hyp:  # anchors commented in hyp.yaml
                 hyp['anchors'] = 3
+        if opt.anchors:
+            hyp['anchors'] = opt.anchors  # override hyp['anchors']
         if opt.noautoanchor:
             del hyp['anchors'], meta['anchors']
         opt.noval, opt.nosave, save_dir = True, True, Path(opt.save_dir)  # only val/save final epoch

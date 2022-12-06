@@ -6,7 +6,7 @@ import re
 import glob
 import multiprocessing.dummy as mpd
 from tqdm import tqdm
-from data_cleaning import clean_filename, get_series
+from slicing.data_cleaning import clean_filename, get_series
 import random
 import numpy as np
 from math import floor

@@ -14,8 +14,8 @@ from typing import Dict, List, Optional, Set, Union
 import numpy as np
 from tqdm import tqdm
 
-from file import load_json, save_json
-from shapely_sahi import ShapelyAnnotation, box, get_shapely_multipolygon
+from slicing.file import load_json, save_json
+from slicing.shapely_sahi import ShapelyAnnotation, box, get_shapely_multipolygon
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(

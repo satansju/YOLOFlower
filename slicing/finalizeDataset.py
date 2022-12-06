@@ -4,11 +4,11 @@ import re
 import sys
 from shutil import rmtree
 
-from data_cleaning import create_yolo_annotations
-from image_resizing import resize_images
+from slicing.data_cleaning import create_yolo_annotations
+from slicing.image_resizing import resize_images
 from p_tqdm import p_map
 
-from slicing import slice_image
+from slicing.slicing import slice_image
 
 from typing import Dict, List, Tuple
 
@@ -44,7 +44,7 @@ def tile_one_image(reduced_file: str, sliced_directory: str) -> None:
             verbose=False
         )
 
-def main(downscaling_factor : str = "4", num_subset : str = None, verbose : str = "False", workers : str = "8") -> None:
+def main(downscaling_factor : str = "4", num_subset : str = None, verbose : str = "False", workers : str = "8", slice : bool = True) -> None:
 
     if not num_subset is None:
         try:
@@ -59,7 +59,11 @@ def main(downscaling_factor : str = "4", num_subset : str = None, verbose : str 
         raise ValueError("Argument verbose must be one of either 'True' or 'False'")
 
     try:
-        downscaling_factor = int(downscaling_factor)
+        if downscaling_factor.count(",") > 0:
+            downscaling_factor = [float(i) for i in downscaling_factor.rsplit(",")]
+            assert len(downscaling_factor) == 2, "Downscaling factor must be a list of length 2."
+        else:
+            downscaling_factor = [float(downscaling_factor) for i in range(2)]
     except:
         raise ValueError("dummy")
     
@@ -71,7 +75,7 @@ def main(downscaling_factor : str = "4", num_subset : str = None, verbose : str 
     source_directory, reduced_directory, sliced_directory = read_directories("directories.txt") 
 
     in_resolution = (6080, 3420)
-    out_resolution = tuple([int(i/downscaling_factor) for i in in_resolution])
+    out_resolution = tuple([int(i/D) for i, D in zip(in_resolution, downscaling_factor)])
 
     print("Output resolution:", out_resolution)
 
@@ -91,27 +95,27 @@ def main(downscaling_factor : str = "4", num_subset : str = None, verbose : str 
         out_dir=reduced_directory,
         verbose=verbose
     )
+    if slice is True:
+        image_path_pattern = f'{reduced_directory}{os.sep}images{os.sep}**{os.sep}**.jpg'
+        sliced_image_path_pattern = f'{sliced_directory}{os.sep}images{os.sep}**.jpg'
+        # annotation_path_pattern = f'{reduced_directory}{os.sep}labels{os.sep}**{os.sep}**.txt' # Not used currently
 
-    image_path_pattern = f'{reduced_directory}{os.sep}images{os.sep}**{os.sep}**.jpg'
-    sliced_image_path_pattern = f'{sliced_directory}{os.sep}images{os.sep}**.jpg'
-    # annotation_path_pattern = f'{reduced_directory}{os.sep}labels{os.sep}**{os.sep}**.txt' # Not used currently
+        origin_image_set = {re.search("[a-zA-Z0-9_]+(?=\.[a-zA-Z]{2,4}$)", i).group(0) for i in glob.iglob(image_path_pattern)}
+        slice_image_set = {re.search("[a-zA-Z0-9_]+(?=(_[0-9]{1,4}){4}\.[a-zA-Z]{2,4}$)", i).group(0) for i in glob.iglob(sliced_image_path_pattern)}
 
-    origin_image_set = {re.search("[a-zA-Z0-9_]+(?=\.[a-zA-Z]{2,4}$)", i).group(0) for i in glob.iglob(image_path_pattern)}
-    slice_image_set = {re.search("[a-zA-Z0-9_]+(?=(_[0-9]{1,4}){4}\.[a-zA-Z]{2,4}$)", i).group(0) for i in glob.iglob(sliced_image_path_pattern)}
+        if verbose_global:
+            print("Origin:", len(origin_image_set), "\nUnion:", len(origin_image_set | slice_image_set), "\nIntersection:", len(origin_image_set & slice_image_set), "\nLeft:", len(origin_image_set - slice_image_set))
 
-    if verbose_global:
-        print("Origin:", len(origin_image_set), "\nUnion:", len(origin_image_set | slice_image_set), "\nIntersection:", len(origin_image_set & slice_image_set), "\nLeft:", len(origin_image_set - slice_image_set))
+        left = origin_image_set - slice_image_set
 
-    left = origin_image_set - slice_image_set
-
-    left_image_paths = []
-    for i in left:
-        possible_left = glob.glob(f'{reduced_directory}{os.sep}images{os.sep}**{os.sep}{i}.jpg')
-        if len(possible_left) == 0:
-            continue
-        left_image_paths.append(possible_left[0])
-        
-    p_map(tile_one_image, left_image_paths, [sliced_directory for i in left_image_paths])
+        left_image_paths = []
+        for i in left:
+            possible_left = glob.glob(f'{reduced_directory}{os.sep}images{os.sep}**{os.sep}{i}.jpg')
+            if len(possible_left) == 0:
+                continue
+            left_image_paths.append(possible_left[0])
+            
+        p_map(tile_one_image, left_image_paths, [sliced_directory for i in left_image_paths])
 
 if __name__ == '__main__':
     kwargs = {}

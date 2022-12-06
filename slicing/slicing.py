@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union, Tuple
 
 import numpy as np
-from coco import Coco, CocoAnnotation, CocoImage, create_coco_dict
-from cv import read_image_as_pil
-from file import load_json, save_json
+from slicing.coco import Coco, CocoAnnotation, CocoImage, create_coco_dict
+from slicing.cv import read_image_as_pil
+from slicing.file import load_json, save_json
 from PIL import Image
 from shapely.errors import TopologicalError
 from tqdm import tqdm

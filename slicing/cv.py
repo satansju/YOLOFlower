@@ -12,7 +12,7 @@ import numpy as np
 import requests
 from PIL import Image
 
-from file import Path
+from slicing.file import Path
 
 IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".tiff", ".bmp"]
 VIDEO_EXTENSIONS = [".mp4", ".mkv", ".flv", ".avi", ".ts", ".mpg", ".mov", "wmv"]
