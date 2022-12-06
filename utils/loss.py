@@ -21,8 +21,14 @@ class BCEBlurWithLogitsLoss(nn.Module):
         super().__init__()
         self.loss_fcn = nn.BCEWithLogitsLoss(reduction='none')  # must be nn.BCEWithLogitsLoss()
         self.alpha = alpha
+        self.weight = None
+        self.pos_weight = None
 
     def forward(self, pred, true):
+        if self.weight is not None:
+            self.loss_fcn.weight = self.weight
+        if self.pos_weight is not None:
+            self.loss_fcn.pos_weight = self.pos_weight
         loss = self.loss_fcn(pred, true)
         pred = torch.sigmoid(pred)  # prob from logits
         dx = pred - true  # reduce only missing label effects
@@ -41,9 +47,15 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
         self.reduction = loss_fcn.reduction
         self.loss_fcn.reduction = 'none'  # required to apply FL to each element
+        self.weight = None
+        self.pos_weight = None
 
-    def forward(self, pred, true, ind):
-        loss = self.loss_fcn(pred, true, ind)
+    def forward(self, pred, true):
+        if self.weight is not None:
+            self.loss_fcn.weight = self.weight
+        if self.pos_weight is not None:
+            self.loss_fcn.pos_weight = self.pos_weight
+        loss = self.loss_fcn(pred, true)
         # p_t = torch.exp(-loss)
         # loss *= self.alpha * (1.000001 - p_t) ** self.gamma  # non-zero power for gradient stability
 
@@ -71,9 +83,15 @@ class QFocalLoss(nn.Module):
         self.alpha = alpha
         self.reduction = loss_fcn.reduction
         self.loss_fcn.reduction = 'none'  # required to apply FL to each element
+        self.weight = None
+        self.pos_weight = None
 
-    def forward(self, pred, true, ind):
-        loss = self.loss_fcn(pred, true, ind)
+    def forward(self, pred, true):
+        if self.weight is not None:
+            self.loss_fcn.weight = self.weight
+        if self.pos_weight is not None:
+            self.loss_fcn.pos_weight = self.pos_weight
+        loss = self.loss_fcn(pred, true)
 
         pred_prob = torch.sigmoid(pred)  # prob from logits
         alpha_factor = true * self.alpha + (1 - true) * (1 - self.alpha)
@@ -126,9 +144,11 @@ class ComputeLoss:
         # Custom
         self.training = False
         self.use_sample_weights = not weights is None
-        self.use_class_weights = use_class_weights
+        self.use_class_weights = bool(use_class_weights) and use_class_weights
         if self.use_class_weights:
             self.cls_w = torch.tensor([h['cls_pw'] * float(i) for i in model.class_weights.detach().cpu().numpy()], device=device)
+        self.val_class_weights = torch.tensor(h["cls_pw"], device=device)
+        self.val_sample_weights = torch.tensor(1.0, device=device)
 
     def __call__(self, p, targets, ind):  # predictions, targets
         lcls = torch.zeros(1, device=self.device)  # class loss
@@ -170,17 +190,27 @@ class ComputeLoss:
                 if self.nc > 1:  # cls loss (only if multiple classes)
                     t = torch.full_like(pcls, self.cn, device=self.device)  # targets
                     t[range(n), tcls[i]] = self.cp
-                    if self.training and self.use_class_weights:
-                        self.BCEcls.pos_weight = self.cls_w.repeat(t.shape[0], 1)
-                    if self.training and self.use_sample_weights:
-                        self.BCEcls.weight = weights[b].reshape(-1, 1)
+                    if self.training:
+                        if self.use_class_weights:
+                            self.BCEcls.pos_weight = self.cls_w.repeat(t.shape[0], 1)
+                        if self.use_sample_weights:
+                            self.BCEcls.weight = weights[b].reshape(-1, 1)
+                    else:
+                        if self.use_class_weights:
+                            self.BCEcls.pos_weight = self.val_class_weights
+                        if self.use_sample_weights:
+                            self.BCEcls.weight = self.val_sample_weights
                     lcls += self.BCEcls(pcls, t)  # BCE
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
-            if self.training and self.use_sample_weights:
-                self.BCEobj.weight = weights.reshape(-1, 1, 1, 1)
+            if self.training:
+                if self.use_sample_weights:
+                    self.BCEobj.weight = weights.reshape(-1, 1, 1, 1)
+            else:
+                if self.use_sample_weights:
+                    self.BCEobj.weight = self.val_sample_weights
             obji = self.BCEobj(pi[..., 4], tobj)
             lobj += obji * self.balance[i]  # obj loss
             if self.autobalance:
