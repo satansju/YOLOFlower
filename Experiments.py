@@ -87,25 +87,25 @@ import pandas as pd
 #     workers="8"
 # )
 
-# for gamma in [0, 0.5, 1, 1.5, 2]:
-#     for class_weights in [False, True]:
-#         clw_lab = 'Y' if class_weights else 'N'
-#         gamma_lab = re.sub("\.", "dot", str(gamma))
-#         run(
-#             img=640,
-#             batch_size=32,
-#             epochs=8,
-#             workers=8,
-#             optimizer="AdamW",
-#             data="data/Flower.yaml",
-#             hyp="data/hyps/FlowerHyp.yaml",
-#             cache="RAM",
-#             name=f'sliced_model_D4_full_gamma{gamma_lab}_class_weights{clw_lab}',
-#             deterministic=True,
-#             weights="yolov5s.pt",
-#             gamma=gamma,
-#             class_weights=class_weights
-#         )
+for gamma in [0, 1, 2]:
+    for class_weights in [False, True]:
+        clw_lab = 'Y' if class_weights else 'N'
+        gamma_lab = re.sub("\.", "dot", str(gamma))
+        run(
+            img=640,
+            batch_size=32,
+            epochs=25,
+            workers=8,
+            optimizer="AdamW",
+            data="data/Flower.yaml",
+            hyp="data/hyps/FlowerHyp.yaml",
+            cache="RAM",
+            name=f'sliced_model_D4_full_gamma{gamma_lab}_class_weights{clw_lab}',
+            deterministic=True,
+            weights="yolov5s.pt",
+            gamma=gamma,
+            class_weights=class_weights
+        )
 
 # # Use the best best values of gamma and class weights for training over 100 epochs on the full dataset (downscaling factor 4)
 
@@ -118,21 +118,21 @@ import pandas as pd
 
 # A test run without focal loss, with class weights and gamma of 0
 
-run(
-    img=640,
-    batch_size=32,
-    epochs=50,
-    workers=8,
-    optimizer="AdamW",
-    data="data/Flower.yaml",
-    hyp="data/hyps/FlowerHyp.yaml",
-    cache="RAM",
-    name=f'test_model_D4_full_gamma0_class_weightsY_focal_lossY_epoch50',
-    deterministic=True,
-    weights="yolov5s.pt",
-    gamma=0,
-    class_weights=True
-)
+# run(
+#     img=640,
+#     batch_size=32,
+#     epochs=50,
+#     workers=8,
+#     optimizer="AdamW",
+#     data="data/Flower.yaml",
+#     hyp="data/hyps/FlowerHyp.yaml",
+#     cache="RAM",
+#     name=f'test_model_D4_full_gamma0_class_weightsY_focal_lossY_epoch50',
+#     deterministic=True,
+#     weights="yolov5s.pt",
+#     gamma=0,
+#     class_weights=True
+# )
 
 # run(
 #     img=640,
