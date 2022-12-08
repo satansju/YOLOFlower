@@ -4,6 +4,7 @@ import re
 import pandas
 import multiprocessing.dummy as mpd
 from tqdm import tqdm
+from typing import List, Tuple, Dict
 
 def bboxesFromDirectory(dir: str) -> pandas.DataFrame:
     ###
@@ -141,7 +142,10 @@ class clean_filenames:
         else:
             raise ValueError("File must be a string or list of strings.")
 
-def create_yolo_annotations(dir: str, out_dir: str, verbose: bool = False) -> None:
+def create_yolo_annotations(dir: str, out_dir: str, verbose: bool = False, excluded_classes: List[str] or str = "Gone") -> None:
+    if not isinstance(excluded_classes, list) and isinstance(excluded_classes, str):
+        excluded_classes = [excluded_classes]
+    
     file_cleaner = clean_filenames(dir)
     class_translator = class_to_index()
     annotations = bboxesFromDirectory(dir)
@@ -187,7 +191,7 @@ def create_yolo_annotations(dir: str, out_dir: str, verbose: bool = False) -> No
 
         with open(label_dst, open_type) as f:
             for cls, bbox in zip(data["class"], data["bbox"]):
-                if not cls or cls[0] == "Gone":
+                if not cls or cls[0] in excluded_classes:
                     continue
                 cls = cls[0]
                 xmax, ymax, width, height = tuple(bbox)
