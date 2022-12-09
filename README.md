@@ -18,6 +18,9 @@
 
   <br>
   <p>
+  This is an adaptation of YOLOv5 for a deep learning for visual recognition project at Aarhus University. The version is adapted to detect flower stages and utilizes slicing and sample weighting. 
+  </p>
+  <p>
     YOLOv5 🚀 is the world's most loved vision AI, representing <a href="https://ultralytics.com">Ultralytics</a>
     open-source research into future vision AI methods, incorporating lessons learned and best practices evolved over thousands of hours of research and development.
     <br><br>
