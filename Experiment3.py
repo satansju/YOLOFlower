@@ -13,8 +13,8 @@ import pandas as pd
 def replace(file_path, pattern, subst):
     #Create temp file
     fh, abs_path = mkstemp()
-    with fdopen(fh,'w') as new_file:
-        with open(file_path) as old_file:
+    with fdopen(fh,'w', encoding="utf-8") as new_file:
+        with open(file_path, encoding="utf-8") as old_file:
             for line in old_file:
                 new_file.write(re.sub(pattern, subst, line))
     #Copy the file permissions from the old file to the new file
