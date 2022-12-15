@@ -296,18 +296,18 @@ def replace(file_path, pattern, subst):
 #     workers="8",
 #     excluded_classes=["Withered", "Gone"]
 # )
-# run(
-#     name= "final_model_200_epochs_NoWithered2",
-#     img=640,
-#     batch_size=32,
-#     epochs=100,
-#     workers=8,
-#     optimizer="AdamW", # If the training is not stable (i.e. loss becomes nan), try SGD
-#     data="data/Flower.yaml",
-#     hyp="data/hyps/FlowerHyp.yaml",
-#     cache="RAM",
-#     deterministic=True,
-#     weights="runs/train/final_model_200_epochs_NoWithered/weights/best.pt",
-#     gamma=0,
-#     class_weights=True
-# )  
+run(
+    name= "final_model_200_epochs_NoWithered3",
+    img=640,
+    batch_size=32,
+    epochs=50,
+    workers=8,
+    optimizer="AdamW", # If the training is not stable (i.e. loss becomes nan), try SGD
+    data="data/Flower.yaml",
+    hyp="data/hyps/FlowerHyp.yaml",
+    cache="RAM",
+    deterministic=True,
+    weights="runs/train/final_model_200_epochs_NoWithered2/weights/best.pt",
+    gamma=0,
+    class_weights=True
+)  

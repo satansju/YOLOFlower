@@ -129,7 +129,7 @@ all_img_paths = ["../Processed/Reduced/images/" +  i for i in [
     "NARS_36/NARS_36_000010.jpg"
 ]]
 
-series = ["BJOR_01"]
+series = ["NARS_14"]
 
 series_dict = {re.sub("_24H|_6H","",re.sub("-", "_", i)) : i for i in os.listdir("../Raw_data/") if not re.search("\.csv$", i)}
 
@@ -148,7 +148,7 @@ def sorted_images(srcs):
 with tqdm([]) as pbar:
     for s in series:
         s_dir = "../Raw_data/" + series_dict[s]
-        series_images = sorted_images(glob.glob(s_dir + "/**"))
+        series_images = sorted_images(glob.glob(s_dir + "/**"))[::8]
     
         # assert False
         
@@ -180,7 +180,7 @@ with tqdm([]) as pbar:
 
             plot_bounding_box(unsliced, test_numpy)
             plt.legend(clLegend, list(cls_to_col.keys()))
-            plt.savefig("plots/BJOR_01/" + str(ind) + ".jpg")
+            plt.savefig("plots/" + s + "/" + str(ind) + ".jpg")
             plt.close()
         
         
