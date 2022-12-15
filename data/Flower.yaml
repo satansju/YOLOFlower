@@ -17,7 +17,7 @@ test:
 names:
   0: Bud
   1: Flower
-  # 2: Withered
+  2: Withered
   3: Immature
   4: Mature
   # 5: Missing

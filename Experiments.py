@@ -287,27 +287,27 @@ def replace(file_path, pattern, subst):
 
 
 # Auxillary runs
+# -- Not used in the report -- #
 # 1) Without the "Withered" class
-finalizeDataset(
-    downscaling_factor="4",
-    num_subset=None,
-    verbose="False",
-    workers="8",
-    slice=False,
-    exclude_classes=["Withered", "Gone"]
-)
-run(
-    name= "final_model_200_epochs_NoWithered",
-    img=640,
-    batch_size=32,
-    epochs=200,
-    workers=8,
-    optimizer="AdamW", # If the training is not stable (i.e. loss becomes nan), try SGD
-    data="data/Flower.yaml",
-    hyp="data/hyps/FlowerHyp.yaml",
-    cache="RAM",
-    deterministic=True,
-    weights="yolov5s.pt",
-    gamma=0,
-    class_weights=True
-)
+# finalizeDataset(
+#     downscaling_factor="4",
+#     num_subset=None,
+#     verbose="False",
+#     workers="8",
+#     excluded_classes=["Withered", "Gone"]
+# )
+# run(
+#     name= "final_model_200_epochs_NoWithered2",
+#     img=640,
+#     batch_size=32,
+#     epochs=100,
+#     workers=8,
+#     optimizer="AdamW", # If the training is not stable (i.e. loss becomes nan), try SGD
+#     data="data/Flower.yaml",
+#     hyp="data/hyps/FlowerHyp.yaml",
+#     cache="RAM",
+#     deterministic=True,
+#     weights="runs/train/final_model_200_epochs_NoWithered/weights/best.pt",
+#     gamma=0,
+#     class_weights=True
+# )  

@@ -45,15 +45,9 @@ def bboxesFromDirectory(dir: str) -> pandas.DataFrame:
     return combinedBBoxes
 
 class class_to_index:
-    def __init__(self):
-        self.dict = {
-            "Bud" : 0,
-            "Flower" : 1,
-            "Withered" : 2,
-            "Immature" : 3,
-            "Mature" : 4,
-            "Gone" : 5
-        }
+    def __init__(self, excluded_classes: List[str] = ["Gone"]):
+        possible_classes = ["Bud", "Flower", "Withered", "Immature", "Mature", "Gone"]
+        self.dict = {c : i for i, c in enumerate([c for c in possible_classes if c not in excluded_classes])}
         self.inv = {v : k for k, v in self.dict.items()}
 
     def translate(self, cls: str or list[str]) -> int or list[int]:
@@ -147,7 +141,7 @@ def create_yolo_annotations(dir: str, out_dir: str, verbose: bool = False, exclu
         excluded_classes = [excluded_classes]
     
     file_cleaner = clean_filenames(dir)
-    class_translator = class_to_index()
+    class_translator = class_to_index(excluded_classes=excluded_classes)
     annotations = bboxesFromDirectory(dir)
 
     if not os.path.exists(out_dir + os.sep + "images"):
