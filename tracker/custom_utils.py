@@ -1,12 +1,13 @@
 import os, exifread, re, glob, tqdm
+import numpy as np
 from PIL import Image
 from functools import reduce
 
-def format_tracks(tracks):
+def format_tracks(tracks, image_path, dateTime):
     if tracks:
-        return reduce(lambda x, y : f'{x}, {y}', [i.__repr__() for i in tracks])
+        return "\n".join([image_path + "\t" + dateTime + "\t" + i.__repr__() for i in tracks]) + "\n"
     else:
-        return ""
+        return f'{image_path}\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
 
 class Class_handler:
     def __init__(self, classes = ["Bud", "Flower", "Withered", "Immature", "Mature"], 
@@ -26,13 +27,19 @@ class Class_handler:
         if cls not in self.classes:
             raise ValueError(f"Class {cls} not in {self.classes}")
         if score > self.cls_thresh[cls]:
-            return (score - self.cls_thresh[cls]) / (1 - self.cls_thresh[cls])
+            return 1/2 + (score - self.cls_thresh[cls]) / (2 * (1 - self.cls_thresh[cls]))
         else:
             return None
         
     def get_color(self, cls):
         if cls in self.classes:
             return self.cls_to_col[cls]
+        else:
+            raise ValueError(f"Class {cls} not in {self.classes}")
+        
+    def get_index(self, cls):
+        if cls in self.classes:
+            return self.cls_to_ind[cls]
         else:
             raise ValueError(f"Class {cls} not in {self.classes}")
 
@@ -67,7 +74,7 @@ class Raw_data(list):
     
     def __getitem__(self, ind):
         self._index = ind
-        return [super().__getitem__(ind)]
+        return super().__getitem__(ind)
 
 
 class ImageSeries(list):
@@ -88,8 +95,9 @@ class ImageSeries(list):
                  subsample = 1) -> None:
         self.pbar = pbar        
         self.series = series
-        self.image_paths = self.sorted_images(glob.glob(raw.dir + raw.series_dict[series] + post))
-        self.image_paths = self.image_paths[::subsample]
+        self.image_paths, self.dates = self.sorted_images(glob.glob(raw.dir + raw.series_dict[series] + post))
+        if subsample and subsample > 1:
+            self.image_paths = self.image_paths[::subsample]
         self.d = downscaling_factor
         self._index = 0
         self._max = len(self.image_paths)
@@ -109,12 +117,11 @@ class ImageSeries(list):
         
         for src in srcs:
             with open(src, "rb") as f:
-                date = str(exifread.process_file(f)["EXIF DateTimeOriginal"])[:10]
-                date = [float(i) for i in re.findall("[0-9\.-]+", date)]
-                date = date[0] * 10**4 + date[1] + date[2] * 10**-4 
+                date = str(exifread.process_file(f)["EXIF DateTimeOriginal"])
+                date = [int(i) for i in re.findall("[0-9\.-]+", date)]
                 dates.append(date)
                 
-        return [i for _, i in sorted(zip(dates, srcs))]
+        return [i for _, i in sorted(zip(dates, srcs))], [":".join([str(j) for j in i]) for i in sorted(dates)]
     
     @staticmethod
     def pbar_desc(s, si, si_max, n):
@@ -131,6 +138,8 @@ class ImageSeries(list):
             raise StopIteration
         next = self[self._index]
         
+        returnValue = np.array(Image.open(next).reduce(self.d)), self.dates[self._index]
+        
         if self.pbar is not None:
             self.pbar.update(1)
             if self._index == 0:
@@ -139,7 +148,7 @@ class ImageSeries(list):
         self._index += 1
         self.current_path = re.search("[^/]+$", next)[0]
         
-        return Image.open(next).reduce(self.d)
+        return returnValue
     
     def __len__(self):
         return self._max

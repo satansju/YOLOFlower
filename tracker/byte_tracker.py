@@ -152,7 +152,7 @@ class STrack(BaseTrack):
         return ret
 
     def __repr__(self):
-        return 'ID_{} Start_{} End_{} Class_{} Box_{}'.format(self.track_id, self.start_frame, self.end_frame, self.cls, ",".join([str(i) for i in STrack.tlwh_to_xywh(self.tlwh)]))
+        return '\t'.join([str(i) for i in [self.track_id, self.start_frame, self.end_frame, self.cls] + list(STrack.tlwh_to_xywh(self.tlwh))])
 
 
 class BYTETracker(object):
@@ -219,7 +219,7 @@ class BYTETracker(object):
         ''' Step 2: First association, with high score detection boxes'''
         strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
         # Predict the current location with KF
-        STrack.multi_predict(strack_pool)
+        # STrack.multi_predict(strack_pool)
         # dists = matching.iou_distance(strack_pool, detections)
         dists = matching.centroid_distance(strack_pool, detections)
         if not self.args.mot20:
@@ -247,7 +247,7 @@ class BYTETracker(object):
             detections_second = []
         r_tracked_stracks = [strack_pool[i] for i in u_track if strack_pool[i].state == TrackState.Tracked]
         dists = matching.centroid_distance(r_tracked_stracks, detections_second)
-        matches, u_track, u_detection_second = matching.linear_assignment(dists, thresh=self.args.match_thresh, min = self.args.min_distance)
+        matches, u_track, u_detection_second = matching.linear_assignment(dists, thresh = self.args.match_thresh, min = self.args.min_distance * 1.5)
         for itracked, idet in matches:
             track = r_tracked_stracks[itracked]
             det = detections_second[idet]
@@ -266,7 +266,7 @@ class BYTETracker(object):
                 lost_stracks.append(track)
 
         '''Deal with unconfirmed tracks, usually tracks with only one beginning frame'''
-        detections = [detections[i] for i in u_detection]
+        detections = [detections[i] for i in u_detection if output_classes[i] in ["Bud", "Flower"]]
         dists = matching.centroid_distance(unconfirmed, detections)
         if not self.args.mot20:
             dists = matching.fuse_score(dists, detections)

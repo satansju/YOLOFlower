@@ -114,7 +114,7 @@ def centroid_distance(atracks, btracks):
     if len(bcentroids) == 0:
         bcentroids = np.reshape(bcentroids, (0, 2))
         
-    cost_matrix = cdist(acentroids, bcentroids)
+    cost_matrix = cdist(acentroids, bcentroids, "euclidean")
 
     return cost_matrix
 
