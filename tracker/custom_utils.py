@@ -7,7 +7,7 @@ def format_tracks(tracks, image_path, dateTime):
     if tracks:
         return "\n".join([image_path + "\t" + dateTime + "\t" + i.__repr__() for i in tracks]) + "\n"
     else:
-        return f'{image_path}\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
+        return f'{image_path}\t{dateTime}\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
 
 class Class_handler:
     def __init__(self, classes = ["Bud", "Flower", "Withered", "Immature", "Mature"], 

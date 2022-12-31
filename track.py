@@ -34,18 +34,18 @@ sahi_model = Yolov5DetectionModel(
 )
 cls_handler = Class_handler(classes = ["Bud", "Flower", "Immature", "Mature"],
                             colors = ["#1B9E77", "#D95F02", "#E7298A", "#66A61E"],
-                            thresholds = [0.3, 0.4, 0.5, 0.6])
-tracker = BYTETracker(DUMMY_args(track_thresh = 0.6, match_thresh = 0.05, track_buffer = 100, mot20 = True, min_distance = 0.01))
+                            thresholds = [0.45, 0.45, 0.6, 0.65])
+tracker = BYTETracker(DUMMY_args(track_thresh = 0.5, match_thresh = 0.05, track_buffer = 100, mot20 = True, min_distance = 0.01))
 postprocess = NMSPostprocess(match_threshold = 0.9)
 
 if (not os.path.exists(tracking_dir)):
     os.mkdir(tracking_dir)
 
 with tqdm() as t:
-    all_series = Raw_data("../Raw_data/")
-    for series_i, series in enumerate([all_series[0]]): #.get_series("BJOR_01")  
+    all_series = Raw_data("../Resized_dataset/")
+    for series_i, series in enumerate(all_series): #.get_series("BJOR_01")  
         with open(tracking_dir + os.sep + series + ".csv", "w") as f:
-            series = ImageSeries(all_series, series, pbar = t, subsample = 1)
+            series = ImageSeries(all_series, series, pbar = t, downscaling_factor=1)
             f.write("Frame\tDateTime\tTrackID\tStartFrame\tEndFrame\tClass\tx\ty\tw\th\n")
             last_image = None
             for image, dateTime in series:
