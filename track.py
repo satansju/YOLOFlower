@@ -18,7 +18,7 @@ import os
 
 from tqdm import tqdm
 
-tracking_dir = "runs/tracking/"
+tracking_dir = "runs/tracking_v2/"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 sahi_model = Yolov5DetectionModel(
@@ -34,9 +34,11 @@ sahi_model = Yolov5DetectionModel(
 )
 cls_handler = Class_handler(classes = ["Bud", "Flower", "Immature", "Mature"],
                             colors = ["#1B9E77", "#D95F02", "#E7298A", "#66A61E"],
-                            thresholds = [0.45, 0.45, 0.6, 0.65])
-tracker = BYTETracker(DUMMY_args(track_thresh = 0.5, match_thresh = 0.05, track_buffer = 100, mot20 = True, min_distance = 0.01))
+                            thresholds = [0.4, 0.4, 0.5, 0.5])
+tracker = BYTETracker(DUMMY_args(track_thresh = 0.5, match_thresh = 0.05, track_buffer = 1000, mot20 = True, min_distance = 0.01))
 postprocess = NMSPostprocess(match_threshold = 0.9)
+
+alignImages = True
 
 if (not os.path.exists(tracking_dir)):
     os.mkdir(tracking_dir)
@@ -50,7 +52,7 @@ with tqdm() as t:
             last_image = None
             for image, dateTime in series:
                 # Perform image alignment, if the image is not the first one
-                if not last_image is None:
+                if not last_image is None and alignImages:
                     try:
                         tvec = ird.similarity(lit.rgb2gray_approx(last_image[::4,::4,:]), lit.rgb2gray_approx(image[::4,::4,:]))["tvec"].round(4)
                         image = ird.transform_img(image, tvec=tvec)
