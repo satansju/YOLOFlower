@@ -9,6 +9,8 @@ def format_tracks(tracks, image_path, dateTime):
     else:
         return f'{image_path}\t{dateTime}\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
 
+# Object class handling class for translating between class names and indices, 
+# as well as providing a color for each class and different detection thresholds for each class.
 class Class_handler:
     def __init__(self, classes = ["Bud", "Flower", "Withered", "Immature", "Mature"], 
                  colors = ["#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E"], 
@@ -43,11 +45,13 @@ class Class_handler:
         else:
             raise ValueError(f"Class {cls} not in {self.classes}")
 
+# Dummy class to set arguments for initializing the ByteTracker class
 class DUMMY_args:
     def __init__(self, **kwargs) -> None:
         for k,v in kwargs.items():
             setattr(self, k, v)
 
+# Class to handle the loading of images as an iterable
 class Raw_data(list):
     def __init__(self, dir = "../Raw_data/") -> None:
         self.dir = dir
