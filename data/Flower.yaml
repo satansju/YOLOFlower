@@ -9,7 +9,7 @@
 
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 path: ../Processed  # dataset root dir
-train: Reduced
+train: Sliced
 val:
 test: 
 
@@ -17,7 +17,7 @@ test:
 names:
   0: Bud
   1: Flower
-  2: Withered
-  3: Immature
-  4: Mature
+  # 2: Withered
+  2: Immature
+  3: Mature
   # 5: Missing

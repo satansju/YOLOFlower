@@ -44,7 +44,7 @@ def tile_one_image(reduced_file: str, sliced_directory: str) -> None:
             verbose=False
         )
 
-def main(downscaling_factor : str = "4", num_subset : str = None, verbose : str = "False", workers : str = "8", slice : bool = True) -> None:
+def main(downscaling_factor : str = "4", num_subset : str = None, verbose : str = "False", workers : str = "8", slice : bool = True, excluded_classes : List[str] or str = "Gone") -> None:
 
     if not num_subset is None:
         try:
@@ -93,7 +93,8 @@ def main(downscaling_factor : str = "4", num_subset : str = None, verbose : str 
     create_yolo_annotations(
         dir=source_directory,
         out_dir=reduced_directory,
-        verbose=verbose
+        verbose=verbose,
+        excluded_classes=excluded_classes,
     )
     if slice is True:
         image_path_pattern = f'{reduced_directory}{os.sep}images{os.sep}**{os.sep}**.jpg'

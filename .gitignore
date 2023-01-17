@@ -57,6 +57,7 @@ VOC/
 # Neural Network weights -----------------------------------------------------------------------------------------------
 *.weights
 *.pt
+!noWithered.pt
 *.pb
 *.onnx
 *.engine
