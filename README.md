@@ -8,6 +8,7 @@ The YOLOFlower model (only trained for <i> Silene acaulis</i> cushion timelapse 
 <h2> Acknowledgements </h2>
 This repository is mainly based on the <a href="https://github.com/ultralytics/yolov5">YOLOv5</a> repository, but has been heavily modified and integrated for usage with <a href="https://github.com/obss/sahi">SAHI</a> and <a href="https://github.com/ifzhang/ByteTrack">ByteTrack</a>.
 <br>
+<br>
 <b>Authors:</b>
 <ul>
     <li> Simon Sataa-Yu Larsen </li>
